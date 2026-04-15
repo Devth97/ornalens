@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "OrnalLens",
+    "slug": "ornalens",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ornalens.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "package": "com.ornalens.app",
+      "permissions": ["android.permission.CAMERA", "android.permission.READ_EXTERNAL_STORAGE"],
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "OrnalLens needs access to your photos to upload jewellery images.",
+          "cameraPermission": "OrnalLens needs camera access to capture jewellery photos."
+        }
+      ]
+    ],
+    "scheme": "ornalens"
+  }
+}

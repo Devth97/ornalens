@@ -19,3 +19,5 @@ mobile/dist/
 # Graphify
 graphify-out/
 raw/
+.claude/
+.claude/
