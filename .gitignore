@@ -1,0 +1,21 @@
+# Secrets — NEVER commit these
+ornallens-gcp-key*.json
+*.json.json
+.env
+.env.local
+web/.env.local
+mobile/.env
+
+# Dependencies
+node_modules/
+web/node_modules/
+mobile/node_modules/
+
+# Build output
+web/.next/
+mobile/.expo/
+mobile/dist/
+
+# Graphify
+graphify-out/
+raw/
