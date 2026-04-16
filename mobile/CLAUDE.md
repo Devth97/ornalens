@@ -1,7 +1,3 @@
-@AGENTS.md
-
----
-
 # Karpathy Coding Principles
 
 Behavioral guidelines to reduce common LLM coding mistakes.
