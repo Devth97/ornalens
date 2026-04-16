@@ -144,7 +144,9 @@ export async function generateVideoFromShot(
 ): Promise<string> {
   const motionPrompt = buildVideoMotionPrompt(angle)
 
-  const requestId = await submitJob('kling-v2-1-i2v', {
+  // Kling v3.0 Standard: best temporal consistency (jewellery stays identical across frames)
+  // + smooth realistic motion at standard cost tier
+  const requestId = await submitJob('kling-v3.0-standard-image-to-video', {
     prompt: motionPrompt,
     images_list: [imageUrl],
     duration: 5,         // seconds
