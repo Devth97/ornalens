@@ -43,3 +43,5 @@ next-env.d.ts
 # Secrets
 ornallens-gcp-key*
 *.json.json
+
+.vercel

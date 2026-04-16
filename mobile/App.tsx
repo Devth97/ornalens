@@ -20,8 +20,20 @@ function AppNavigator() {
   // Wire Clerk's getToken into the API module so every authenticated
   // fetch call gets a valid JWT without touching SecureStore directly.
   useEffect(() => {
-    setClerkTokenGetter(getToken)
-  }, [getToken])
+    if (isSignedIn) {
+      // Wrap to ensure we always call with no args and get a plain string token
+      setClerkTokenGetter(async () => {
+        try {
+          const token = await getToken()
+          console.log('[Auth] Token obtained:', token ? `${token.slice(0, 20)}...` : 'null')
+          return token
+        } catch (e) {
+          console.error('[Auth] getToken failed:', e)
+          return null
+        }
+      })
+    }
+  }, [isSignedIn, getToken])
 
   if (!isLoaded) {
     return (

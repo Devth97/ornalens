@@ -81,10 +81,19 @@ export async function placeJewelleryOnModel(
   // The AI must read it from the reference image (images_list), not invent from text.
   // The prompt only describes who is wearing it and the scene.
   const prompt = [
-    `Indian female model, ${skinTone} skin, ${bodyType} build, ${pose} pose`,
+    `Indian female model, ${skinTone} skin tone, ${bodyType} build, ${pose} pose`,
     `wearing the exact jewellery shown in the reference image — preserve every gemstone, metal, and detail precisely as uploaded`,
-    `professional jewellery photography, clean white studio background, elegant lighting`,
-    `high fashion editorial, 9:16 portrait`,
+    // Realism skin texture directives
+    `photorealistic skin — visible natural pores on cheeks nose bridge and forehead`,
+    `subtle golden warmth and natural flush on cheeks and nose tip`,
+    `natural under-eye depth with faint realistic skin fold`,
+    `fine natural lip texture with slight lip lines — not smoothed`,
+    `very subtle T-zone natural sheen on forehead and nose`,
+    `no airbrushing no digital smoothness — real human skin texture`,
+    `one or two faint natural micro-blemishes for authenticity`,
+    `fine baby hair strands visible at hairline temples`,
+    `professional jewellery photography, clean white studio background, soft elegant lighting`,
+    `hyperrealistic fashion editorial, shot on Phase One IQ4, 9:16 portrait`,
   ].join(', ')
 
   const requestId = await submitJob('nano-banana-2-edit', {
@@ -113,7 +122,12 @@ export async function generateAngleShots(
         `Same Indian female model from the reference image`,
         `wearing the exact same jewellery — do not alter any gemstone, metal, or design detail`,
         composition,
-        `professional jewellery advertisement photography, high resolution`,
+        // Realism skin texture — same across all angles for consistency
+        `photorealistic skin texture — natural pores visible on cheeks and forehead`,
+        `subtle golden skin warmth, natural under-eye depth, fine lip texture`,
+        `no airbrushing no digital smoothing — real human skin`,
+        `fine baby hair at temples, one or two faint natural skin marks`,
+        `professional jewellery advertisement photography, hyperrealistic, high resolution`,
         `IMPORTANT: preserve jewellery design exactly as in reference image`,
       ].join(', ')
 
