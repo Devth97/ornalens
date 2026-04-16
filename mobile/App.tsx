@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { ClerkProvider, useAuth } from '@clerk/expo'
 import { tokenCache } from '@clerk/expo/token-cache'
 import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { ActivityIndicator, View } from 'react-native'
+import { setClerkTokenGetter } from './src/lib/api'
 
 import SignInScreen from './src/screens/SignInScreen'
 import HomeScreen from './src/screens/HomeScreen'
@@ -14,7 +15,13 @@ import JobStatusScreen from './src/screens/JobStatusScreen'
 const Stack = createNativeStackNavigator()
 
 function AppNavigator() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+
+  // Wire Clerk's getToken into the API module so every authenticated
+  // fetch call gets a valid JWT without touching SecureStore directly.
+  useEffect(() => {
+    setClerkTokenGetter(getToken)
+  }, [getToken])
 
   if (!isLoaded) {
     return (

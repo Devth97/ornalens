@@ -1,10 +1,18 @@
 // API client for the Next.js backend
-import * as SecureStore from 'expo-secure-store'
-
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
 
+// Injected by App.tsx via setClerkTokenGetter — Clerk manages its own token
+// storage internally; we must use its getToken() rather than reading
+// SecureStore directly (Clerk does NOT write to a 'clerk-token' key).
+let _getToken: (() => Promise<string | null>) | null = null
+
+export function setClerkTokenGetter(fn: () => Promise<string | null>) {
+  _getToken = fn
+}
+
 async function getAuthHeader(): Promise<Record<string, string>> {
-  const token = await SecureStore.getItemAsync('clerk-token')
+  if (!_getToken) throw new Error('Clerk token getter not initialized')
+  const token = await _getToken()
   if (!token) throw new Error('Not authenticated')
   return { Authorization: `Bearer ${token}` }
 }
@@ -51,8 +59,11 @@ export async function createJob(params: {
   })
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error ?? 'Failed to create job')
+    const errText = await res.text().catch(() => '')
+    let err
+    try { err = JSON.parse(errText) } catch { err = { error: errText } }
+    console.error(`[API Error] POST /api/jobs: ${res.status}`, errText)
+    throw new Error(err.error ?? `Failed to create job (${res.status})`)
   }
 
   const data = await res.json()
@@ -75,7 +86,11 @@ export async function listJobs() {
   const headers = await getAuthHeader()
 
   const res = await fetch(`${API_URL}/api/jobs`, { headers })
-  if (!res.ok) throw new Error('Failed to fetch jobs')
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error(`[API Error] GET /api/jobs: ${res.status}`, errText)
+    throw new Error(`Failed to fetch jobs (${res.status}): ${errText}`)
+  }
   const data = await res.json()
   return data.jobs
 }
