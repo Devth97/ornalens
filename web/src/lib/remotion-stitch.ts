@@ -1,9 +1,6 @@
-// Video stitching pipeline:
-// 1. Veo3 generates individual clips per angle shot
-// 2. Remotion renders dissolve transitions between clips
-// 3. FFmpeg concatenates: clip1 + transition + clip2 + transition + ...
-//
-// This runs server-side on Railway (Node.js, NOT in browser)
+// Video stitching — concat with fade transitions
+// Uses only ffmpeg filters available in old bundled versions (no xfade)
+// xfade was added in FFmpeg 4.3 (2020); bundled binary is 2017
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -14,67 +11,67 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 const execFileAsync = promisify(execFile)
 
-// Get ffmpeg path — works locally and on Railway
 function getFfmpegPath(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@ffmpeg-installer/ffmpeg').path
   } catch {
-    return 'ffmpeg' // fallback to system ffmpeg
+    return 'ffmpeg'
   }
 }
 
-/**
- * Download a remote video URL to a temp file
- */
 async function downloadVideo(url: string, destPath: string): Promise<void> {
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`Failed to download video: ${url}`)
+  if (!res.ok) throw new Error(`Failed to download video (${res.status}): ${url}`)
   const buffer = await res.arrayBuffer()
   await fs.writeFile(destPath, Buffer.from(buffer))
 }
 
 /**
- * Generate a dissolve transition between two video clips using FFmpeg
- * Returns path to the transition clip
+ * Add fade-out to tail of a clip (works on all ffmpeg versions)
+ * This avoids xfade entirely — each clip fades to black at the end
+ * and fades in from black at the start → smooth transition feel when concatenated
  */
-async function generateDissolveTransition(
-  clip1Path: string,
-  clip2Path: string,
+async function addFadeEffects(
+  inputPath: string,
   outputPath: string,
-  durationSec = 0.8
+  durationSec: number,
+  fadeDuration = 0.6
 ): Promise<void> {
   const ffmpeg = getFfmpegPath()
+  const fadeOutStart = Math.max(0, durationSec - fadeDuration)
 
-  // Get duration of clip1
-  const { stdout } = await execFileAsync('ffprobe', [
-    '-v', 'error',
-    '-show_entries', 'format=duration',
-    '-of', 'default=noprint_wrappers=1:nokey=1',
-    clip1Path,
-  ]).catch(() => ({ stdout: '5' }))
-
-  const clip1Duration = parseFloat(stdout.trim()) || 5
-  const offset = Math.max(0, clip1Duration - durationSec)
-
-  // xfade dissolve transition
   await execFileAsync(ffmpeg, [
-    '-i', clip1Path,
-    '-i', clip2Path,
-    '-filter_complex',
-    `[0:v][1:v]xfade=transition=dissolve:duration=${durationSec}:offset=${offset}[v]`,
-    '-map', '[v]',
+    '-i', inputPath,
+    '-vf', `fade=in:0:${Math.round(fadeDuration * 24)},fade=out:st=${fadeOutStart}:d=${fadeDuration}`,
     '-c:v', 'libx264',
     '-preset', 'fast',
     '-crf', '23',
+    '-an',   // strip audio (MuAPI videos have audio track that causes concat issues)
     '-y', outputPath,
   ])
 }
 
 /**
- * Stitch all video clips with dissolve transitions using FFmpeg
- * Input: array of video URLs (from Veo3 / Supabase storage)
- * Output: path to final stitched video
+ * Get video duration via ffprobe
+ */
+async function getVideoDuration(clipPath: string): Promise<number> {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      clipPath,
+    ])
+    return parseFloat(stdout.trim()) || 5
+  } catch {
+    return 5
+  }
+}
+
+/**
+ * Stitch all video clips with fade-in/out transitions
+ * Works with any ffmpeg version — no xfade needed
  */
 export async function stitchVideosWithTransitions(
   videoUrls: string[],
@@ -83,49 +80,41 @@ export async function stitchVideosWithTransitions(
   const tmpDir = path.join(os.tmpdir(), `ornalens-${jobId}`)
   await fs.mkdir(tmpDir, { recursive: true })
 
-  console.log(`[stitch] Downloading ${videoUrls.length} clips to ${tmpDir}`)
+  console.log(`[stitch] Downloading ${videoUrls.length} clips`)
 
   // Download all clips
-  const clipPaths: string[] = []
+  const rawPaths: string[] = []
   for (let i = 0; i < videoUrls.length; i++) {
-    const clipPath = path.join(tmpDir, `clip_${i}.mp4`)
+    const clipPath = path.join(tmpDir, `raw_${i}.mp4`)
     await downloadVideo(videoUrls[i], clipPath)
-    clipPaths.push(clipPath)
+    rawPaths.push(clipPath)
     console.log(`[stitch] Downloaded clip ${i + 1}/${videoUrls.length}`)
   }
 
-  if (clipPaths.length === 1) {
-    return clipPaths[0] // Nothing to stitch
+  if (rawPaths.length === 1) {
+    return rawPaths[0]
   }
 
-  // Generate dissolve transitions between consecutive clips
-  const transitionPaths: string[] = []
-  for (let i = 0; i < clipPaths.length - 1; i++) {
-    const transPath = path.join(tmpDir, `transition_${i}_${i + 1}.mp4`)
-    console.log(`[stitch] Generating dissolve transition ${i} → ${i + 1}`)
-    await generateDissolveTransition(clipPaths[i], clipPaths[i + 1], transPath)
-    transitionPaths.push(transPath)
-  }
-
-  // Build concat list: clip0, transition_0_1, clip1, transition_1_2, clip2, ...
-  const concatItems: string[] = []
-  for (let i = 0; i < clipPaths.length; i++) {
-    concatItems.push(clipPaths[i])
-    if (i < transitionPaths.length) {
-      concatItems.push(transitionPaths[i])
-    }
+  // Add fade-in/out to each clip
+  const fadedPaths: string[] = []
+  for (let i = 0; i < rawPaths.length; i++) {
+    const duration = await getVideoDuration(rawPaths[i])
+    const fadedPath = path.join(tmpDir, `faded_${i}.mp4`)
+    console.log(`[stitch] Adding fade effects to clip ${i + 1} (duration: ${duration}s)`)
+    await addFadeEffects(rawPaths[i], fadedPath, duration)
+    fadedPaths.push(fadedPath)
   }
 
   // Write concat manifest
   const concatListPath = path.join(tmpDir, 'concat_list.txt')
-  const concatContent = concatItems.map(p => `file '${p}'`).join('\n')
+  const concatContent = fadedPaths.map(p => `file '${p}'`).join('\n')
   await fs.writeFile(concatListPath, concatContent)
 
-  // Final stitch
+  // Final concat stitch
   const finalPath = path.join(tmpDir, 'final.mp4')
   const ffmpeg = getFfmpegPath()
 
-  console.log(`[stitch] Stitching ${concatItems.length} segments into final video`)
+  console.log(`[stitch] Concatenating ${fadedPaths.length} clips`)
   await execFileAsync(ffmpeg, [
     '-f', 'concat',
     '-safe', '0',
@@ -142,7 +131,7 @@ export async function stitchVideosWithTransitions(
 }
 
 /**
- * Upload stitched video to Supabase storage and return public URL
+ * Upload stitched video to Supabase storage
  */
 export async function uploadFinalVideo(
   videoPath: string,
@@ -168,8 +157,6 @@ export async function uploadFinalVideo(
     .from('ornalens-media')
     .getPublicUrl(storagePath)
 
-  // Cleanup tmp
   await fs.rm(path.dirname(videoPath), { recursive: true, force: true })
-
   return data.publicUrl
 }

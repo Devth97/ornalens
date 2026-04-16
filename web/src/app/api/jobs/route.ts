@@ -2,6 +2,7 @@
 // GET  /api/jobs — list jobs for authenticated user
 
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { placeJewelleryOnModel, generateAngleShots, generateAllVideoClips } from '@/lib/muapi'
@@ -54,9 +55,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: createErr?.message ?? 'Failed to create job' }, { status: 500 })
   }
 
-  // Return job ID immediately — pipeline runs in background
-  runPipeline(job.id, jewellery_image_url, jewellery_description, model_style)
-    .catch(err => console.error(`[pipeline] Job ${job.id} failed:`, err))
+  // waitUntil keeps the Vercel serverless function alive until pipeline completes
+  // Without this, Vercel kills the process as soon as the response is sent
+  waitUntil(
+    runPipeline(job.id, jewellery_image_url, jewellery_description, model_style)
+      .catch(err => console.error(`[pipeline] Job ${job.id} failed:`, err))
+  )
 
   return NextResponse.json({ job_id: job.id, status: 'processing' }, { status: 201 })
 }
@@ -90,8 +94,8 @@ async function runPipeline(
     })
     console.log(`[pipeline:${jobId}] Generated ${shots.length} shots`)
 
-    // ── Step 3: MuAPI Kling v2.1 — video per shot ──────────────────────
-    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Kling v2.1)`)
+    // ── Step 3: MuAPI Kling v3.0 — video per shot ──────────────────────
+    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Kling v3.0)`)
     const videoClips = await generateAllVideoClips(shots, description)
 
     const shotsWithVideos = shots.map((shot, i) => ({
