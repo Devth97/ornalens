@@ -148,10 +148,10 @@ export async function generateAngleShots(
       ].join(', ')
 
       // Flux PuLID: purpose-built face identity preservation
-      // Accepts reference_image_url for face lock + prompt for scene/angle
+      // Field is image_url (string) — confirmed from 422 error loc:["body","image_url"]
       const requestId = await submitJob('flux-pulid', {
         prompt,
-        reference_image_url: modelImageUrl,  // PuLID anchors face from this
+        image_url: modelImageUrl,   // ← was reference_image_url, PuLID needs image_url
         aspect_ratio: '9:16',
         quality: 'high',
       })
