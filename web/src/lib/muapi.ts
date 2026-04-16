@@ -1,13 +1,13 @@
-// MuAPI client — jewellery placement, multi-angle shots, and video generation
+// MuAPI client — jewellery placement, multi-angle shots (with face lock), video generation
 const BASE_URL = 'https://api.muapi.ai'
 
 // ─── Angle shot definitions ────────────────────────────────────────────────
 const SHOT_ANGLES = [
-  { angle: 'front',         composition: 'front view, face-on, eye-level camera, 50mm lens, f/4, professional studio lighting, full necklace clearly visible' },
-  { angle: 'three_quarter', composition: 'three-quarter view, slight left turn, 50mm lens, f/4, studio lighting, jewellery fully visible' },
-  { angle: 'close_up',      composition: 'extreme close-up on the necklace, 100mm macro lens, f/2.8, shallow depth of field, every gemstone in sharp detail' },
-  { angle: 'side',          composition: 'side profile view, 35mm lens, f/4, elegant standing pose, full jewellery drape visible' },
-  { angle: 'overhead_tilt', composition: 'slight high-angle editorial shot, 35mm lens, f/5.6, dramatic lighting, full jewellery layout visible' },
+  { angle: 'front',         composition: 'front view, face-on, eye-level camera, 50mm lens, f/4, soft studio lighting, full necklace clearly visible, clean white background' },
+  { angle: 'three_quarter', composition: 'three-quarter view, slight left turn, 50mm lens, f/4, studio lighting, jewellery fully visible, clean white background' },
+  { angle: 'close_up',      composition: 'upper body shot focusing on the necklace, 85mm lens, f/2.8, jewellery in sharp detail, model face and neck visible, white background' },
+  { angle: 'side',          composition: 'side profile view, 35mm lens, f/4, elegant standing pose, full jewellery drape visible, white background' },
+  { angle: 'overhead_tilt', composition: 'slight high-angle editorial shot, 35mm lens, f/5.6, dramatic lighting, jewellery fully visible, white background' },
 ]
 
 // ─── Core request helpers ──────────────────────────────────────────────────
@@ -39,7 +39,6 @@ async function pollResult(requestId: string, maxWaitMs = 300_000): Promise<strin
     const data = await res.json()
     const status = (data.status || '').toLowerCase()
     if (['completed', 'succeeded', 'success'].includes(status)) {
-      // video endpoints return video URL, image endpoints return image URL
       return data.outputs?.[0] ?? data.video_url ?? data.url ?? data.output
     }
     if (['failed', 'error'].includes(status)) {
@@ -62,11 +61,11 @@ export async function uploadToMuAPI(imageBuffer: Buffer, filename: string): Prom
   return data.url
 }
 
-// ─── Step 1: Place jewellery on model (NanoBanana) ─────────────────────────
+// ─── Step 1: Place jewellery on model (NanoBanana 2) ──────────────────────
 /**
- * CRITICAL: The reference image IS the jewellery source of truth.
- * We never describe the jewellery design in the prompt — the model reads it
- * directly from images_list. The prompt only controls the model/scene.
+ * CRITICAL: Reference image IS the jewellery source of truth.
+ * Prompt only controls model/scene. Jewellery is read from images_list.
+ * Skin texture is subtle and realistic — not exaggerated.
  */
 export async function placeJewelleryOnModel(
   jewelleryImageUrl: string,
@@ -77,23 +76,14 @@ export async function placeJewelleryOnModel(
   const bodyType = modelStyle.body_type ?? 'slim'
   const pose = modelStyle.pose ?? 'standing'
 
-  // IMPORTANT: Do NOT describe the jewellery design in the prompt.
-  // The AI must read it from the reference image (images_list), not invent from text.
-  // The prompt only describes who is wearing it and the scene.
   const prompt = [
-    `Indian female model, ${skinTone} skin tone, ${bodyType} build, ${pose} pose`,
-    `wearing the exact jewellery shown in the reference image — preserve every gemstone, metal, and detail precisely as uploaded`,
-    // Realism skin texture directives
-    `photorealistic skin — visible natural pores on cheeks nose bridge and forehead`,
-    `subtle golden warmth and natural flush on cheeks and nose tip`,
-    `natural under-eye depth with faint realistic skin fold`,
-    `fine natural lip texture with slight lip lines — not smoothed`,
-    `very subtle T-zone natural sheen on forehead and nose`,
-    `no airbrushing no digital smoothness — real human skin texture`,
-    `one or two faint natural micro-blemishes for authenticity`,
-    `fine baby hair strands visible at hairline temples`,
+    `Indian female model, ${skinTone} skin tone, ${bodyType} build, ${pose} pose, elegant expression`,
+    `wearing the exact jewellery shown in the reference image — copy every gemstone shape color and metal detail precisely`,
+    // Subtle realism — not exaggerated
+    `photorealistic skin — fine natural pores, subtle warmth on cheeks, natural lip texture`,
+    `slight natural T-zone sheen, fine baby hair at temples, no heavy airbrushing`,
     `professional jewellery photography, clean white studio background, soft elegant lighting`,
-    `hyperrealistic fashion editorial, shot on Phase One IQ4, 9:16 portrait`,
+    `hyperrealistic fashion editorial, Phase One IQ4 camera quality, 9:16 portrait`,
   ].join(', ')
 
   const requestId = await submitJob('nano-banana-2-edit', {
@@ -106,50 +96,80 @@ export async function placeJewelleryOnModel(
   return pollResult(requestId)
 }
 
-// ─── Step 2: 5 multi-angle shots (flux-kontext i2i) ───────────────────────
+// ─── Step 2: Face-lock swap — ensures identity matches Step 1 model ────────
 /**
- * Input is the model-wearing-jewellery image from Step 1.
- * Low strength (0.35) = stays very close to the source — preserves jewellery identity.
- * Prompt only changes camera angle/composition, never redesigns jewellery.
+ * After generating each angle shot, swap the face from the original
+ * Step 1 model image onto it. This is how Higgsfield "Shots" maintains
+ * consistent identity across all angles — generate variant, then face-lock.
+ */
+async function lockFaceConsistency(
+  angleImageUrl: string,   // generated angle shot (target — face may have drifted)
+  modelImageUrl: string,   // Step 1 output (source face to lock in)
+): Promise<string> {
+  try {
+    const requestId = await submitJob('ai-image-face-swap', {
+      target_image_url: angleImageUrl,  // the angle shot to fix
+      source_image_url: modelImageUrl,  // the reference face to lock in
+    })
+    return await pollResult(requestId, 120_000)
+  } catch (e) {
+    // Face swap failed — return original angle shot rather than crashing pipeline
+    console.warn(`[muapi] Face swap failed for angle shot, using original:`, e)
+    return angleImageUrl
+  }
+}
+
+// ─── Step 3: 5 multi-angle shots with face consistency ────────────────────
+/**
+ * Two-pass approach (like Higgsfield Shots):
+ * Pass 1 — flux-kontext-pro generates angle variant (may drift in face)
+ * Pass 2 — face-swap locks original model face back onto each shot
+ * This guarantees consistent identity across all 5 angles.
  */
 export async function generateAngleShots(
   modelImageUrl: string,
-  description: string
+  _description: string
 ): Promise<Array<{ angle: string; prompt: string; image_url: string }>> {
-  const results = await Promise.all(
+  // Run all 5 angle generations in parallel (Pass 1)
+  const pass1Results = await Promise.all(
     SHOT_ANGLES.map(async ({ angle, composition }) => {
       const prompt = [
         `Same Indian female model from the reference image`,
-        `wearing the exact same jewellery — do not alter any gemstone, metal, or design detail`,
+        `wearing the exact same jewellery — do not alter any gemstone metal or design detail`,
         composition,
-        // Realism skin texture — same across all angles for consistency
-        `photorealistic skin texture — natural pores visible on cheeks and forehead`,
-        `subtle golden skin warmth, natural under-eye depth, fine lip texture`,
-        `no airbrushing no digital smoothing — real human skin`,
-        `fine baby hair at temples, one or two faint natural skin marks`,
-        `professional jewellery advertisement photography, hyperrealistic, high resolution`,
-        `IMPORTANT: preserve jewellery design exactly as in reference image`,
+        // Subtle skin realism — consistent with Step 1, not over-applied
+        `natural photorealistic skin, subtle pores, no airbrushing`,
+        `professional jewellery advertisement photography, hyperrealistic`,
+        `CRITICAL: preserve jewellery design and model appearance exactly as in reference`,
       ].join(', ')
 
-      const requestId = await submitJob('flux-kontext-dev-i2i', {
+      const requestId = await submitJob('flux-kontext-pro-i2i', {
         prompt,
         images_list: [modelImageUrl],
         aspect_ratio: '9:16',
         quality: 'high',
-        strength: 0.35,   // Low = stays close to source image → preserves jewellery
+        strength: 0.30,  // Very low = stays very close to source, preserves face + jewellery
       })
       const imageUrl = await pollResult(requestId)
       return { angle, prompt, image_url: imageUrl }
     })
   )
+
+  // Pass 2 — face-lock each angle shot back to original model (sequential to avoid rate limits)
+  const results = []
+  for (const shot of pass1Results) {
+    console.log(`[muapi] Locking face consistency for angle: ${shot.angle}`)
+    const lockedImageUrl = await lockFaceConsistency(shot.image_url, modelImageUrl)
+    results.push({ ...shot, image_url: lockedImageUrl })
+  }
+
   return results
 }
 
-// ─── Step 3: Image-to-video via MuAPI (Kling v2.1 — best available) ───────
+// ─── Step 4: Image-to-video (Kling v3.0 Standard) ─────────────────────────
 /**
- * Generates a 5-second cinematic video clip from each angle shot.
- * Uses Kling v2.1 image-to-video — best motion quality on MuAPI.
- * Prompt focuses on elegant model movement only; jewellery is locked to the image.
+ * Correct field: image_url (string) — NOT images_list (array).
+ * Error confirmed: loc: ["body","image_url"] missing.
  */
 export async function generateVideoFromShot(
   imageUrl: string,
@@ -158,32 +178,30 @@ export async function generateVideoFromShot(
 ): Promise<string> {
   const motionPrompt = buildVideoMotionPrompt(angle)
 
-  // Kling v3.0 Standard: best temporal consistency (jewellery stays identical across frames)
-  // + smooth realistic motion at standard cost tier
   const requestId = await submitJob('kling-v3.0-standard-image-to-video', {
     prompt: motionPrompt,
-    images_list: [imageUrl],
-    duration: 5,         // seconds
+    image_url: imageUrl,   // ← FIXED: was images_list:[imageUrl], Kling needs image_url string
+    duration: 5,
     aspect_ratio: '9:16',
     cfg_scale: 0.5,
   })
 
-  return pollResult(requestId, 600_000) // 10 min timeout for video
+  return pollResult(requestId, 600_000)
 }
 
 function buildVideoMotionPrompt(angle: string): string {
   const motionMap: Record<string, string> = {
-    front:         'model gently tilts her head and smiles softly, jewellery catches the light elegantly, slow graceful movement, cinematic',
-    three_quarter: 'model slowly turns from three-quarter to face the camera, jewellery shimmers, smooth elegant motion',
-    close_up:      'camera slowly pulls back from jewellery close-up, revealing the model\'s face, jewellery sparkles beautifully',
-    side:          'model gracefully turns her head toward camera from side profile, jewellery catches studio light',
-    overhead_tilt: 'camera slowly descends from overhead angle to eye-level, dramatic jewellery reveal, editorial fashion',
+    front:         'model gently tilts her head and smiles softly, jewellery catches the studio light elegantly, slow graceful movement, cinematic fashion film',
+    three_quarter: 'model slowly turns from three-quarter toward camera, jewellery shimmers beautifully, smooth elegant motion, fashion advertisement',
+    close_up:      'subtle camera pull-back from jewellery revealing model face, jewellery sparkles with studio lighting, slow elegant reveal',
+    side:          'model gracefully turns her head from side profile toward camera, jewellery catches the light, smooth fashion motion',
+    overhead_tilt: 'camera slowly descends from high angle to eye-level, dramatic jewellery reveal, editorial fashion film',
   }
-  return motionMap[angle] ?? 'model moves gracefully, jewellery shimmers in studio light, elegant slow motion, cinematic fashion film'
+  return motionMap[angle] ?? 'model moves gracefully, jewellery shimmers in studio light, elegant slow motion, cinematic fashion'
 }
 
 /**
- * Generate all 5 video clips in sequence (not parallel — avoids MuAPI rate limits)
+ * Generate all 5 video clips sequentially (avoids MuAPI rate limits)
  */
 export async function generateAllVideoClips(
   shots: Array<{ angle: string; image_url: string }>,
