@@ -55,7 +55,12 @@ async function pollResult(requestId: string, maxWaitMs = 300_000): Promise<strin
     const data = await res.json()
     const status = (data.status || '').toLowerCase()
     if (['completed', 'succeeded', 'success'].includes(status)) {
-      return data.outputs?.[0] ?? data.video_url ?? data.url ?? data.output
+      // Check all known output field names across MuAPI endpoints:
+      // nano-banana/flux → outputs[0] or image or url
+      // kling-i2v → video
+      const result = data.outputs?.[0] ?? data.video ?? data.image ?? data.video_url ?? data.url ?? data.output
+      if (!result) throw new Error(`MuAPI job completed but no output URL found. Keys: ${Object.keys(data).join(', ')}`)
+      return result
     }
     if (['failed', 'error'].includes(status)) {
       throw new Error(`MuAPI job failed: ${data.error || status}`)
@@ -151,9 +156,9 @@ export async function generateAngleShots(
       // Field is image_url (string) — confirmed from 422 error loc:["body","image_url"]
       const requestId = await submitJob('flux-pulid', {
         prompt,
-        image_url: modelImageUrl,   // ← was reference_image_url, PuLID needs image_url
-        aspect_ratio: '9:16',
-        quality: 'high',
+        image_url: modelImageUrl,  // required — face identity source
+        aspect_ratio: '9:16',      // valid optional param per MuAPI docs
+        // NOTE: 'quality' is NOT a valid flux-pulid param — removed to prevent 422
       })
 
       const imageUrl = await pollResult(requestId)
@@ -174,12 +179,13 @@ export async function generateVideoFromShot(
 ): Promise<string> {
   const motionPrompt = buildVideoMotionPrompt(angle)
 
+  // Valid params per MuAPI docs: prompt, image_url, duration, generate_audio
+  // REMOVED: aspect_ratio (not valid), cfg_scale (not valid) — were causing silent failures
   const requestId = await submitJob('kling-v3.0-standard-image-to-video', {
     prompt: motionPrompt,
-    image_url: imageUrl,   // ← string, not array
+    image_url: imageUrl,
     duration: 5,
-    aspect_ratio: '9:16',
-    cfg_scale: 0.5,
+    generate_audio: false,  // prevents audio track conflicts in FFmpeg concat
   })
 
   return pollResult(requestId, 600_000)

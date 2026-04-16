@@ -41,13 +41,16 @@ async function addFadeEffects(
   const ffmpeg = getFfmpegPath()
   const fadeOutStart = Math.max(0, durationSec - fadeDuration)
 
+  // Use consistent keyword syntax — avoids mixed old/new syntax issues across ffmpeg versions
+  // fade=t=in:st=0:d=N  →  fade in from black over N seconds at start
+  // fade=t=out:st=X:d=N →  fade out to black over N seconds at end
   await execFileAsync(ffmpeg, [
     '-i', inputPath,
-    '-vf', `fade=in:0:${Math.round(fadeDuration * 24)},fade=out:st=${fadeOutStart}:d=${fadeDuration}`,
+    '-vf', `fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${fadeOutStart}:d=${fadeDuration}`,
     '-c:v', 'libx264',
     '-preset', 'fast',
     '-crf', '23',
-    '-an',   // strip audio (MuAPI videos have audio track that causes concat issues)
+    '-an',   // strip audio — kling generates audio, but we don't need it; avoids concat issues
     '-y', outputPath,
   ])
 }
