@@ -9,9 +9,11 @@ const MODEL = 'veo-3.0-generate-preview'
 const BASE_URL = `https://${LOCATION}-aiplatform.googleapis.com/v1`
 
 async function getAccessToken(): Promise<string> {
+  const credJson = process.env.GOOGLE_CREDENTIALS_JSON
   const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
   const auth = new GoogleAuth({
-    keyFilename: credPath ? path.resolve(process.cwd(), credPath) : undefined,
+    credentials: credJson ? JSON.parse(credJson) : undefined,
+    keyFilename: !credJson && credPath ? path.resolve(process.cwd(), credPath) : undefined,
     scopes: ['https://www.googleapis.com/auth/cloud-platform'],
   })
   const client = await auth.getClient()
