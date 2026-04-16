@@ -114,11 +114,13 @@ export async function placeJewelleryOnModel(
     `hyperrealistic, Phase One IQ4 camera quality, 9:16 portrait`,
   ].join(', ')
 
+  // Valid nano-banana-2-edit params: prompt, images_list, aspect_ratio, resolution, output_format
+  // 'quality' is NOT valid — removed to prevent 422
   const requestId = await submitJob('nano-banana-2-edit', {
     prompt,
     images_list: [jewelleryImageUrl],
     aspect_ratio: '9:16',
-    quality: 'high',
+    resolution: '2k',   // valid — upgrades output quality
   })
 
   return pollResult(requestId)
