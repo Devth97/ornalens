@@ -98,8 +98,8 @@ export async function placeJewelleryOnModel(
     `Indian female model, ${skinTone} skin tone, ${bodyType} build, ${pose} pose, calm elegant expression`,
     // JEWELLERY: read from image — do NOT describe design in text
     `wearing the exact necklace jewellery shown in the reference image — copy every gemstone shape color arrangement and metal detail with pixel-perfect accuracy, do not alter the jewellery in any way`,
-    // CLOTHING — elegant Indian attire that complements high-end jewellery
-    `wearing an elegant ivory cream silk blouse with subtle embroidery, simple Indian formal attire that showcases the necklace beautifully`,
+    // CLOTHING — deep V-neck saree blouse, shoulders bare, neck fully exposed for maximum jewellery visibility
+    `wearing a deep V-neck Indian saree blouse in rich navy dark-blue with gold zari border, bare shoulders, décolletage and full neck clearly visible to showcase the necklace beautifully, saree draped elegantly over one shoulder`,
     // MAKEUP — define clearly so it stays consistent across angles
     `soft bridal makeup, warm nude-rose lip colour, natural kajal-lined eyes, subtle golden highlighter, groomed brows`,
     // SKIN — subtle realism
@@ -137,8 +137,8 @@ export async function generateAngleShots(
         `same Indian female model from reference image, identical face features lips eyes brows skin tone`,
         // JEWELLERY — must not change
         `wearing the exact same necklace jewellery as reference — same gemstones same metal same arrangement, do not alter jewellery`,
-        // CLOTHING — same as Step 1
-        `ivory cream silk blouse with subtle embroidery, elegant Indian formal attire`,
+        // CLOTHING — same as Step 1, deep V-neck for necklace visibility
+        `deep V-neck navy dark-blue saree blouse with gold zari border, bare shoulders, neck and décolletage fully visible, saree draped over one shoulder`,
         // MAKEUP — lock these explicitly to prevent drift
         `identical makeup as reference: warm nude-rose lips, natural kajal eyes, subtle golden highlighter`,
         // Camera angle — only thing that changes
