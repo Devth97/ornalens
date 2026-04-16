@@ -1,6 +1,6 @@
-// Video stitching — concat with fade transitions
-// Uses only ffmpeg filters available in old bundled versions (no xfade)
-// xfade was added in FFmpeg 4.3 (2020); bundled binary is 2017
+// Video stitching — simple copy concat (no re-encoding)
+// Why no fade/xfade: re-encoding on Vercel is unreliable (binary permissions, /tmp limits)
+// -c copy is instant, lossless, and works on any ffmpeg version
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -28,53 +28,8 @@ async function downloadVideo(url: string, destPath: string): Promise<void> {
 }
 
 /**
- * Add fade-out to tail of a clip (works on all ffmpeg versions)
- * This avoids xfade entirely — each clip fades to black at the end
- * and fades in from black at the start → smooth transition feel when concatenated
- */
-async function addFadeEffects(
-  inputPath: string,
-  outputPath: string,
-  durationSec: number,
-  fadeDuration = 0.6
-): Promise<void> {
-  const ffmpeg = getFfmpegPath()
-  const fadeOutStart = Math.max(0, durationSec - fadeDuration)
-
-  // Use consistent keyword syntax — avoids mixed old/new syntax issues across ffmpeg versions
-  // fade=t=in:st=0:d=N  →  fade in from black over N seconds at start
-  // fade=t=out:st=X:d=N →  fade out to black over N seconds at end
-  await execFileAsync(ffmpeg, [
-    '-i', inputPath,
-    '-vf', `fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${fadeOutStart}:d=${fadeDuration}`,
-    '-c:v', 'libx264',
-    '-preset', 'fast',
-    '-crf', '23',
-    '-an',   // strip audio — kling generates audio, but we don't need it; avoids concat issues
-    '-y', outputPath,
-  ])
-}
-
-/**
- * Get video duration via ffprobe
- */
-async function getVideoDuration(clipPath: string): Promise<number> {
-  try {
-    const { stdout } = await execFileAsync('ffprobe', [
-      '-v', 'error',
-      '-show_entries', 'format=duration',
-      '-of', 'default=noprint_wrappers=1:nokey=1',
-      clipPath,
-    ])
-    return parseFloat(stdout.trim()) || 5
-  } catch {
-    return 5
-  }
-}
-
-/**
- * Stitch all video clips with fade-in/out transitions
- * Works with any ffmpeg version — no xfade needed
+ * Stitch clips using -c copy (no re-encoding).
+ * Fast, reliable, works on any ffmpeg. No fade effects needed at this stage.
  */
 export async function stitchVideosWithTransitions(
   videoUrls: string[],
@@ -86,45 +41,32 @@ export async function stitchVideosWithTransitions(
   console.log(`[stitch] Downloading ${videoUrls.length} clips`)
 
   // Download all clips
-  const rawPaths: string[] = []
+  const clipPaths: string[] = []
   for (let i = 0; i < videoUrls.length; i++) {
-    const clipPath = path.join(tmpDir, `raw_${i}.mp4`)
+    const clipPath = path.join(tmpDir, `clip_${i}.mp4`)
     await downloadVideo(videoUrls[i], clipPath)
-    rawPaths.push(clipPath)
+    clipPaths.push(clipPath)
     console.log(`[stitch] Downloaded clip ${i + 1}/${videoUrls.length}`)
   }
 
-  if (rawPaths.length === 1) {
-    return rawPaths[0]
-  }
-
-  // Add fade-in/out to each clip
-  const fadedPaths: string[] = []
-  for (let i = 0; i < rawPaths.length; i++) {
-    const duration = await getVideoDuration(rawPaths[i])
-    const fadedPath = path.join(tmpDir, `faded_${i}.mp4`)
-    console.log(`[stitch] Adding fade effects to clip ${i + 1} (duration: ${duration}s)`)
-    await addFadeEffects(rawPaths[i], fadedPath, duration)
-    fadedPaths.push(fadedPath)
-  }
+  if (clipPaths.length === 1) return clipPaths[0]
 
   // Write concat manifest
   const concatListPath = path.join(tmpDir, 'concat_list.txt')
-  const concatContent = fadedPaths.map(p => `file '${p}'`).join('\n')
+  const concatContent = clipPaths.map(p => `file '${p}'`).join('\n')
   await fs.writeFile(concatListPath, concatContent)
 
-  // Final concat stitch
   const finalPath = path.join(tmpDir, 'final.mp4')
   const ffmpeg = getFfmpegPath()
 
-  console.log(`[stitch] Concatenating ${fadedPaths.length} clips`)
+  console.log(`[stitch] Concatenating ${clipPaths.length} clips with -c copy`)
+
+  // -c copy = no re-encoding, instant, lossless — avoids all codec/filter issues on Vercel
   await execFileAsync(ffmpeg, [
     '-f', 'concat',
     '-safe', '0',
     '-i', concatListPath,
-    '-c:v', 'libx264',
-    '-preset', 'medium',
-    '-crf', '20',
+    '-c', 'copy',
     '-movflags', '+faststart',
     '-y', finalPath,
   ])
@@ -133,9 +75,6 @@ export async function stitchVideosWithTransitions(
   return finalPath
 }
 
-/**
- * Upload stitched video to Supabase storage
- */
 export async function uploadFinalVideo(
   videoPath: string,
   jobId: string,
@@ -148,10 +87,7 @@ export async function uploadFinalVideo(
   const { error } = await (supabaseAdmin as any)
     .storage
     .from('ornalens-media')
-    .upload(storagePath, buffer, {
-      contentType: 'video/mp4',
-      upsert: true,
-    })
+    .upload(storagePath, buffer, { contentType: 'video/mp4', upsert: true })
 
   if (error) throw new Error(`Supabase upload failed: ${error.message}`)
 

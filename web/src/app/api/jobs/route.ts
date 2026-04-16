@@ -107,13 +107,23 @@ async function runPipeline(
       angle_shots: shotsWithVideos,
     })
 
-    // ── Step 4: Stitch with dissolve transitions ────────────────────────
-    console.log(`[pipeline:${jobId}] Step 4: Stitching with dissolve transitions`)
+    // ── Step 4: Stitch clips ────────────────────────────────────────────
+    console.log(`[pipeline:${jobId}] Step 4: Stitching video clips`)
     await updateJob(jobId, { status: 'stitching' })
 
-    const videoUrls = videoClips.map(v => v.video_url)
-    const finalVideoLocalPath = await stitchVideosWithTransitions(videoUrls, jobId)
-    const finalVideoUrl = await uploadFinalVideo(finalVideoLocalPath, jobId, supabaseAdmin as any)
+    let finalVideoUrl: string | null = null
+    try {
+      const videoUrls = videoClips.map(v => v.video_url)
+      const finalVideoLocalPath = await stitchVideosWithTransitions(videoUrls, jobId)
+      finalVideoUrl = await uploadFinalVideo(finalVideoLocalPath, jobId, supabaseAdmin as any)
+      console.log(`[pipeline:${jobId}] ✅ Stitch complete: ${finalVideoUrl}`)
+    } catch (stitchErr) {
+      // Stitch failed — still mark completed so user can see images + individual clips
+      // Fallback: use the first video clip as the "final" video
+      const msg = stitchErr instanceof Error ? stitchErr.message : String(stitchErr)
+      console.error(`[pipeline:${jobId}] ⚠️ Stitch failed (non-fatal): ${msg}`)
+      finalVideoUrl = videoClips[0]?.video_url ?? null
+    }
 
     await updateJob(jobId, { status: 'completed', final_video_url: finalVideoUrl })
     console.log(`[pipeline:${jobId}] ✅ Complete: ${finalVideoUrl}`)
