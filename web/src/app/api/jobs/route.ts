@@ -4,8 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { placeJewelleryOnModel, generateAngleShots } from '@/lib/muapi'
-import { generateAllVideoClips } from '@/lib/veo3'
+import { placeJewelleryOnModel, generateAngleShots, generateAllVideoClips } from '@/lib/muapi'
 import { stitchVideosWithTransitions, uploadFinalVideo } from '@/lib/remotion-stitch'
 
 export async function GET() {
@@ -56,14 +55,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Return job ID immediately — pipeline runs in background
-  runPipeline(job.id, jewellery_image_url, jewellery_description, model_style, userId)
+  runPipeline(job.id, jewellery_image_url, jewellery_description, model_style)
     .catch(err => console.error(`[pipeline] Job ${job.id} failed:`, err))
 
   return NextResponse.json({ job_id: job.id, status: 'processing' }, { status: 201 })
 }
 
 async function updateJob(jobId: string, updates: Record<string, unknown>) {
-  await supabaseAdmin.from('jobs').update(updates).eq('id', jobId)
+  const { error } = await supabaseAdmin.from('jobs').update(updates).eq('id', jobId)
+  if (error) console.error(`[pipeline] updateJob failed for ${jobId}:`, error.message)
 }
 
 async function runPipeline(
@@ -71,7 +71,6 @@ async function runPipeline(
   jewelleryImageUrl: string,
   description: string,
   modelStyle: Record<string, string>,
-  _userId: string
 ) {
   console.log(`[pipeline] Starting job ${jobId}`)
 
@@ -91,25 +90,24 @@ async function runPipeline(
     })
     console.log(`[pipeline:${jobId}] Generated ${shots.length} shots`)
 
-    // ── Step 3: Veo 3 — video per shot ────────────────────────────────
-    console.log(`[pipeline:${jobId}] Step 3: Generating video clips with Veo 3`)
+    // ── Step 3: MuAPI Kling v2.1 — video per shot ──────────────────────
+    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Kling v2.1)`)
     const videoClips = await generateAllVideoClips(shots, description)
 
-    // Store video URIs back into angle_shots
     const shotsWithVideos = shots.map((shot, i) => ({
       ...shot,
-      video_url: videoClips[i]?.video_gcs_uri ?? null,
+      video_url: videoClips[i]?.video_url ?? null,
     }))
     await updateJob(jobId, {
       status: 'videos_done',
       angle_shots: shotsWithVideos,
     })
 
-    // ── Step 4: FFmpeg stitch with dissolve transitions ─────────────────
+    // ── Step 4: Stitch with dissolve transitions ────────────────────────
     console.log(`[pipeline:${jobId}] Step 4: Stitching with dissolve transitions`)
     await updateJob(jobId, { status: 'stitching' })
 
-    const videoUrls = videoClips.map(v => v.video_gcs_uri)
+    const videoUrls = videoClips.map(v => v.video_url)
     const finalVideoLocalPath = await stitchVideosWithTransitions(videoUrls, jobId)
     const finalVideoUrl = await uploadFinalVideo(finalVideoLocalPath, jobId, supabaseAdmin as any)
 
