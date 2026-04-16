@@ -73,7 +73,7 @@ export async function placeJewelleryOnModel(
 
   const requestId = await submitJob('nano-banana-2-edit', {
     prompt,
-    image_url: jewelleryImageUrl,
+    images_list: [jewelleryImageUrl],   // API requires array, not image_url
     aspect_ratio: '9:16',
     quality: 'high',
   })
@@ -94,7 +94,7 @@ export async function generateAngleShots(
       const fullPrompt = `Indian female model wearing ${description}, ${prompt}, professional jewellery photography, high resolution, editorial fashion`
       const requestId = await submitJob('flux-kontext-dev-i2i', {
         prompt: fullPrompt,
-        image_url: modelImageUrl,
+        images_list: [modelImageUrl],   // API requires array, not image_url
         aspect_ratio: '9:16',
         quality: 'high',
         strength: 0.55,
