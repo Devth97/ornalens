@@ -154,13 +154,13 @@ export async function generateAngleShots(
         `professional jewellery advertisement photography, hyperrealistic, clean white studio background`,
       ].join(', ')
 
-      // Flux PuLID: purpose-built face identity preservation
-      // Field is image_url (string) — confirmed from 422 error loc:["body","image_url"]
-      const requestId = await submitJob('flux-pulid', {
+      // flux-kontext-pro-i2i: PROVEN to work in production (5 successful completions confirmed)
+      // flux-pulid was switched in but never tested — reverting to safe known endpoint
+      const requestId = await submitJob('flux-kontext-pro-i2i', {
         prompt,
-        image_url: modelImageUrl,  // required — face identity source
-        aspect_ratio: '9:16',      // valid optional param per MuAPI docs
-        // NOTE: 'quality' is NOT a valid flux-pulid param — removed to prevent 422
+        images_list: [modelImageUrl],  // confirmed working field name
+        aspect_ratio: '9:16',
+        strength: 0.30,               // low = stays close to source, preserves face + jewellery
       })
 
       const imageUrl = await pollResult(requestId)
