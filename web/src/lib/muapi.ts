@@ -4,17 +4,23 @@ const BASE_URL = 'https://api.muapi.ai'
 // ─── Character anchor ─────────────────────────────────────────────────────
 // Locked across ALL prompts — prevents model drift between angles and videos.
 // Skin tone intentionally omitted here; injected dynamically from modelStyle.
+// Full anchor — used in Step 1 (NanoBanana) only where we control the initial generation.
+// Includes skin realism details that get baked into the output image.
 const CHARACTER_ANCHOR = [
   'modern elegant Indian woman, mid-20s, sharp jawline, almond-shaped dark brown eyes, sleek straight dark hair',
   'soft bridal makeup, warm nude-rose lips, natural kajal-lined eyes, subtle golden highlighter',
   'refined confident expression',
-  // Skin realism — subtle, not exaggerated
   'photorealistic skin with visible natural pores on cheeks nose bridge and forehead, fine grain texture',
   'slight natural warmth and golden flush on cheeks and nose tip, natural under-eye depth with faint realistic shadow',
-  'fine natural lip texture with subtle lip lines, very subtle T-zone natural sheen on forehead and nose — alive not oily',
+  'fine natural lip texture with subtle lip lines, very subtle T-zone natural sheen on forehead and nose, alive not oily',
   'no digital smoothness no airbrushed appearance, one or two faint natural skin marks for authenticity',
   'fine baby hair strands visible at hairline and temples',
 ].join(', ')
+
+// Short face lock — used in Step 2 (Flux) only.
+// Skin/texture details are already baked into the Step 1 output image.
+// Kept short deliberately to stay within MuAPI prompt length limits.
+const FLUX_FACE_LOCK = 'same model as reference image, identical face skin tone makeup and hair preserved exactly'
 
 // ─── Outfit options ───────────────────────────────────────────────────────
 // Picked once per job in runPipeline and passed to both Step 1 + Step 2.
@@ -208,18 +214,17 @@ export async function generateAngleShots(
   const settled = await Promise.allSettled(
     SHOT_ANGLES.map(async ({ angle, composition }) => {
       const prompt = [
-        // CHARACTER_ANCHOR + reference image lock face identity across all angles
-        `same model as reference: ${CHARACTER_ANCHOR}, identical face lips eyes brows skin tone preserved`,
-        // JEWELLERY LOCK — NanoBanana output already contains the jewellery; reinforce via prompt
-        `wearing the EXACT same jewellery as shown in the reference image — every gemstone shape cut colour quantity and arrangement preserved identically`,
-        `DO NOT add earrings rings bangles or any accessory not visible in reference. DO NOT simplify or change any jewellery element.`,
-        // CLOTHING — same outfit as Step 1 for consistency within this job
-        `wearing ${outfitDesc}, full neck and collarbone visible`,
-        // Camera angle — only thing that changes per shot
+        // Short face lock — skin details already baked into the Step 1 reference image
+        FLUX_FACE_LOCK,
+        // JEWELLERY LOCK
+        'exact same jewellery as reference, every gemstone preserved, DO NOT add earrings or any unlisted accessory',
+        // CLOTHING
+        `wearing ${outfitDesc}`,
+        // Camera angle
         composition,
-        // Quality — luxury formula: texture focus + elegant camera angle
-        `professional luxury jewellery advertisement photography, hyperrealistic, emphasis on gemstone sparkle and precious metal texture`,
-      ].join('. ')
+        // Quality
+        'professional luxury jewellery photography, hyperrealistic',
+      ].join(', ')
 
       // flux-kontext-pro-i2i: single reference image only — confirmed working in production
       const requestId = await submitJob('flux-kontext-pro-i2i', {
