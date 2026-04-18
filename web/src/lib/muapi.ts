@@ -7,7 +7,13 @@ const BASE_URL = 'https://api.muapi.ai'
 const CHARACTER_ANCHOR = [
   'modern elegant Indian woman, mid-20s, sharp jawline, almond-shaped dark brown eyes, sleek straight dark hair',
   'soft bridal makeup, warm nude-rose lips, natural kajal-lined eyes, subtle golden highlighter',
-  'refined confident expression, photorealistic skin texture, natural pores',
+  'refined confident expression',
+  // Skin realism — subtle, not exaggerated
+  'photorealistic skin with visible natural pores on cheeks nose bridge and forehead, fine grain texture',
+  'slight natural warmth and golden flush on cheeks and nose tip, natural under-eye depth with faint realistic shadow',
+  'fine natural lip texture with subtle lip lines, very subtle T-zone natural sheen on forehead and nose — alive not oily',
+  'no digital smoothness no airbrushed appearance, one or two faint natural skin marks for authenticity',
+  'fine baby hair strands visible at hairline and temples',
 ].join(', ')
 
 // ─── Angle shot definitions ───────────────────────────────────────────────
