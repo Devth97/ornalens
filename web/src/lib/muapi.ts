@@ -16,6 +16,25 @@ const CHARACTER_ANCHOR = [
   'fine baby hair strands visible at hairline and temples',
 ].join(', ')
 
+// ─── Outfit options ───────────────────────────────────────────────────────
+// Picked once per job in runPipeline and passed to both Step 1 + Step 2.
+// All options: round/scoop neck to keep full neck + collarbone visible for jewellery.
+// Varied colours and embroidery so each job looks distinct.
+const OUTFIT_OPTIONS = [
+  'round-neck navy blue silk saree blouse with gold zari border, saree draped over one shoulder',
+  'round-neck deep burgundy silk blouse with silver zari embroidery, dupatta draped elegantly over one shoulder',
+  'round-neck ivory cream silk blouse with subtle gold threadwork, champagne silk saree draped over one shoulder',
+  'round-neck forest green silk blouse with copper and gold embellishment, saree draped over one shoulder',
+  'round-neck deep rose blush-pink silk blouse with pearl and gold embroidery, saree draped over one shoulder',
+  'round-neck midnight black silk blouse with gold geometric embroidery, silk saree draped elegantly over one shoulder',
+  'round-neck royal purple silk blouse with silver zari border, deep plum saree draped over one shoulder',
+  'round-neck teal peacock-blue silk blouse with gold threadwork, saree draped elegantly over one shoulder',
+]
+
+export function pickOutfit(): string {
+  return OUTFIT_OPTIONS[Math.floor(Math.random() * OUTFIT_OPTIONS.length)]
+}
+
 // ─── Angle shot definitions ───────────────────────────────────────────────
 // Each angle changes ONLY camera/composition — model, clothing, jewellery unchanged.
 // Luxury Brand Formula: Minimal Subject + Premium Environment + Soft Lighting +
@@ -134,7 +153,8 @@ export async function uploadToMuAPI(imageBuffer: Buffer, filename: string): Prom
 export async function placeJewelleryOnModel(
   jewelleryImageUrl: string,
   description: string,
-  modelStyle: { skin_tone?: string; body_type?: string; pose?: string }
+  modelStyle: { skin_tone?: string; body_type?: string; pose?: string },
+  outfit: string,
 ): Promise<string> {
   const skinTone = modelStyle.skin_tone ?? 'medium'
   const bodyType = modelStyle.body_type ?? 'slim'
@@ -150,8 +170,8 @@ export async function placeJewelleryOnModel(
     `Copy every metal element — chain links, pendant shape, hanging bars, fringe details — exactly as shown.`,
     `DO NOT add earrings, rings, bangles, maang tikka, nose ring, or ANY accessory not present in the reference image.`,
     `DO NOT simplify, stylise, resize, or alter any part of the jewellery design. The jewellery is locked.`,
-    // CLOTHING — round/scoop neck for jewellery visibility without deep décolletage
-    `wearing a round-neck scoop-neck Indian saree blouse in rich navy dark-blue with gold zari border, full neck and collarbone clearly visible to showcase the jewellery beautifully, saree draped elegantly over one shoulder`,
+    // CLOTHING — picked once per job, passed in from runPipeline for consistency across all steps
+    `wearing ${outfit}, full neck and collarbone clearly visible to showcase the jewellery beautifully`,
     // SCENE — luxury formula: minimal subject + premium environment + soft lighting
     `professional jewellery photography, clean white studio background, soft diffused lighting, emphasis on texture and reflections`,
     `hyperrealistic, Phase One IQ4 camera quality, 9:16 portrait`,
@@ -169,46 +189,42 @@ export async function placeJewelleryOnModel(
   return pollResult(requestId)
 }
 
-// ─── Step 2: Multi-angle shots — Higgsfield Shots dual-reference approach ──
+// ─── Step 2: Multi-angle shots via Flux Kontext Pro ────────────────────────
 /**
- * Dual-reference = Higgsfield Shots technique:
- *   images_list[0] = NanoBanana output  → locks model face, pose, clothing
- *   images_list[1] = original jewellery → locks exact gemstone/metal design
- * Flux Kontext sees both simultaneously — it cannot drift the jewellery
- * design because the original product image is always in its context.
+ * Single reference = NanoBanana output (already has model + jewellery together).
+ * Dual-reference (two images in images_list) caused all 5 jobs to fail — Flux
+ * Kontext Pro I2I only accepts one image. Jewellery design is locked through the
+ * NanoBanana output + strong prompt constraints instead.
  */
 export async function generateAngleShots(
   modelImageUrl: string,
   _description: string,
-  jewelleryImageUrl?: string,       // original jewellery photo — dual-reference lock
+  _jewelleryImageUrl?: string,  // kept for API compat, not used (single-ref only)
+  outfit?: string,
 ): Promise<Array<{ angle: string; prompt: string; image_url: string }>> {
-  // Build reference list — jewellery image added as second ref when available
-  const referenceImages = jewelleryImageUrl
-    ? [modelImageUrl, jewelleryImageUrl]  // dual-reference: model + product
-    : [modelImageUrl]
+  const outfitDesc = outfit ?? OUTFIT_OPTIONS[0]
 
   // Promise.allSettled — if one angle fails we keep the rest and don't waste credits
   const settled = await Promise.allSettled(
     SHOT_ANGLES.map(async ({ angle, composition }) => {
       const prompt = [
-        // CHARACTER_ANCHOR + reference image together lock face identity across all angles
+        // CHARACTER_ANCHOR + reference image lock face identity across all angles
         `same model as reference: ${CHARACTER_ANCHOR}, identical face lips eyes brows skin tone preserved`,
-        // JEWELLERY LOCK — second reference image enforces this at the pixel level
-        `wearing the EXACT same jewellery as the product reference image — every gemstone shape cut colour quantity and arrangement preserved identically`,
+        // JEWELLERY LOCK — NanoBanana output already contains the jewellery; reinforce via prompt
+        `wearing the EXACT same jewellery as shown in the reference image — every gemstone shape cut colour quantity and arrangement preserved identically`,
         `DO NOT add earrings rings bangles or any accessory not visible in reference. DO NOT simplify or change any jewellery element.`,
-        // CLOTHING — same as Step 1, round/scoop neck for jewellery visibility
-        `round-neck scoop-neck navy dark-blue saree blouse with gold zari border, full neck and collarbone visible, saree draped over one shoulder`,
+        // CLOTHING — same outfit as Step 1 for consistency within this job
+        `wearing ${outfitDesc}, full neck and collarbone visible`,
         // Camera angle — only thing that changes per shot
         composition,
         // Quality — luxury formula: texture focus + elegant camera angle
         `professional luxury jewellery advertisement photography, hyperrealistic, emphasis on gemstone sparkle and precious metal texture`,
       ].join('. ')
 
-      // flux-kontext-pro-i2i: PROVEN to work in production
-      // Dual reference: [model image, jewellery image] — Higgsfield Shots approach
+      // flux-kontext-pro-i2i: single reference image only — confirmed working in production
       const requestId = await submitJob('flux-kontext-pro-i2i', {
         prompt,
-        images_list: referenceImages,  // dual-reference when jewellery URL provided
+        images_list: [modelImageUrl],  // single ref — dual-ref caused all 5 to fail
         aspect_ratio: '9:16',
         strength: 0.20,                // low = stays close to source
       })

@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { getAuthUserId } from '@/lib/get-auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { placeJewelleryOnModel, generateAngleShots, generateAllVideoClips } from '@/lib/muapi'
+import { placeJewelleryOnModel, generateAngleShots, generateAllVideoClips, pickOutfit } from '@/lib/muapi'
 import { stitchVideosWithTransitions, uploadFinalVideo } from '@/lib/remotion-stitch'
 
 export async function GET(req: NextRequest) {
@@ -83,16 +83,20 @@ async function runPipeline(
 ) {
   console.log(`[pipeline] Starting job ${jobId}`)
 
+  // Pick outfit once — used in both Step 1 + Step 2 so all angles match within a job
+  const outfit = pickOutfit()
+  console.log(`[pipeline:${jobId}] Outfit selected: ${outfit}`)
+
   try {
     // ── Step 1: NanoBanana — place jewellery on model ──────────────────
     console.log(`[pipeline:${jobId}] Step 1: Placing jewellery on model`)
-    const modelImageUrl = await placeJewelleryOnModel(jewelleryImageUrl, description, modelStyle)
+    const modelImageUrl = await placeJewelleryOnModel(jewelleryImageUrl, description, modelStyle, outfit)
     await updateJob(jobId, { status: 'model_done', model_image_url: modelImageUrl })
     console.log(`[pipeline:${jobId}] Model image: ${modelImageUrl}`)
 
     // ── Step 2: Multi-angle shots ──────────────────────────────────────
-    console.log(`[pipeline:${jobId}] Step 2: Generating angle shots (dual-reference: model + jewellery)`)
-    const shots = await generateAngleShots(modelImageUrl, description, jewelleryImageUrl)
+    console.log(`[pipeline:${jobId}] Step 2: Generating angle shots`)
+    const shots = await generateAngleShots(modelImageUrl, description, jewelleryImageUrl, outfit)
     await updateJob(jobId, {
       status: 'shots_done',
       angle_shots: shots.map(s => ({ ...s, video_url: null })),
