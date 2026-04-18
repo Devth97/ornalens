@@ -14,26 +14,15 @@ const CHARACTER_ANCHOR = [
 // Each angle changes ONLY camera/composition — model, clothing, jewellery unchanged.
 // Luxury Brand Formula: Minimal Subject + Premium Environment + Soft Lighting +
 //   Texture Focus + Elegant Camera Angle (from AI Video Creation Guide)
+// TEMPORARY — 2 angles only to test stitch + Remotion transitions. Restore all 5 after confirming.
 const SHOT_ANGLES = [
   {
     angle: 'front',
     composition: 'full portrait, model facing camera directly, jewellery centred and fully visible at neckline, clean white studio background, soft diffused front lighting, professional luxury jewellery campaign, 85mm lens, f/2.0, sharp on jewellery',
   },
   {
-    angle: 'three_quarter',
-    composition: 'three-quarter portrait, model at 45-degree angle to camera, jewellery visible against neckline, elegant posture, soft directional studio lighting, muted dark background, 85mm lens, jewellery in sharp focus',
-  },
-  {
     angle: 'close_up',
     composition: 'extreme close-up jewellery hero shot, tight frame on jewellery piece against jawline or neckline, studio macro lighting enhancing gemstone brilliance and precious metal shine, macro lens, f/1.8, hyper-detailed, ultra-sharp on jewellery, background completely blurred, neutral soft studio background',
-  },
-  {
-    angle: 'side',
-    composition: 'clean side profile portrait, model facing left, jewellery catching soft window light from the right side, subtle hair tucked behind ear, 85mm lens, shallow depth of field, neutral background, jewellery in sharp focus',
-  },
-  {
-    angle: 'overhead_tilt',
-    composition: 'slightly elevated camera angle looking down at model, model gazes slightly upward, jewellery fully visible and catching warm ambient light, lifestyle luxury aesthetic, 50mm lens, 4K cinematic framing, shallow depth of field',
   },
 ]
 
@@ -213,10 +202,10 @@ export async function generateAngleShots(
     .filter((r): r is { angle: string; prompt: string; image_url: string } => r !== null)
 
   if (successes.length === 0) {
-    throw new Error('All 5 angle shots failed — no images to proceed with')
+    throw new Error('All angle shots failed — no images to proceed with')
   }
 
-  console.log(`[muapi] ${successes.length}/5 angle shots succeeded`)
+  console.log(`[muapi] ${successes.length}/${SHOT_ANGLES.length} angle shots succeeded`)
   return successes
 }
 
