@@ -273,9 +273,16 @@ export async function generateVideoFromShot(
   return pollResult(requestId, 600_000)
 }
 
-// Motion Prompt Formula (from AI Video Creation Guide):
-// Camera Movement + Subject Motion + Environmental Effects + Speed + Mood
-// + Jewelry-Specific: focus-tracks-jewellery, sparkle/flare language, lens specs
+// Jewellery consistency lock — prepended to every video prompt.
+// Seedance drifts from the reference image over time; this constraint anchors
+// the design in every frame, preventing mid-video hallucination.
+const VIDEO_JEWELLERY_LOCK =
+  'jewellery design is IDENTICAL in every single frame of the video — ' +
+  'same gemstone colours, shapes, arrangement, and metal finish throughout, ' +
+  'no changes to jewellery design at any point, jewellery remains exactly as shown in the reference image'
+
+// Motion Prompt Formula: Camera Movement + Subject Motion + Environmental Effects + Speed + Mood
+// Jewellery lock is prepended to every prompt to prevent mid-video design drift.
 function buildVideoMotionPrompt(angle: string): string {
   const motionMap: Record<string, string> = {
     front:
@@ -307,28 +314,45 @@ function buildVideoMotionPrompt(angle: string): string {
       'soft shadows, premium lifestyle aesthetic, ' +
       '50mm lens, 4K cinematic framing, shallow depth of field, focus remains on jewellery',
   }
-  return (
-    motionMap[angle] ??
+
+  const basePrompt = motionMap[angle] ??
     'model moves gracefully, jewellery catches studio light brilliantly, gemstones sparkle with each subtle movement, ' +
     'focus tracks jewellery throughout, 4K slow motion, cinematic luxury jewellery campaign'
-  )
+
+  return `${VIDEO_JEWELLERY_LOCK}. ${basePrompt}`
 }
 
 /**
- * Generate all 5 video clips sequentially (avoids MuAPI rate limits).
- * modelImageUrl is the NanoBanana output — passed as a secondary reference
- * to Seedance for consistent face/jewellery identity across all clips.
+ * Generate all video clips in PARALLEL — all submitted simultaneously.
+ * Sequential took ~15 min for 5 clips and hit Vercel's 300s timeout after clip 4.
+ * Parallel brings total time down to ~3-4 min (time of the single slowest clip).
+ * MuAPI confirmed no rate limit issues with 5 parallel jobs (same as Flux step).
  */
 export async function generateAllVideoClips(
   shots: Array<{ angle: string; image_url: string }>,
   description: string,
   modelImageUrl?: string,
 ): Promise<Array<{ angle: string; video_url: string }>> {
-  const results: Array<{ angle: string; video_url: string }> = []
-  for (const shot of shots) {
-    console.log(`[muapi] Generating video for angle: ${shot.angle}`)
-    const videoUrl = await generateVideoFromShot(shot.image_url, shot.angle, description, modelImageUrl)
-    results.push({ angle: shot.angle, video_url: videoUrl })
-  }
+  console.log(`[muapi] Submitting all ${shots.length} Seedance jobs in parallel`)
+
+  const settled = await Promise.allSettled(
+    shots.map(async (shot) => {
+      console.log(`[muapi] Submitted Seedance job for angle: ${shot.angle}`)
+      const videoUrl = await generateVideoFromShot(shot.image_url, shot.angle, description, modelImageUrl)
+      console.log(`[muapi] Video done for angle: ${shot.angle}`)
+      return { angle: shot.angle, video_url: videoUrl }
+    })
+  )
+
+  const results = settled
+    .map((r, i) => {
+      if (r.status === 'fulfilled') return r.value
+      console.error(`[muapi] Video for ${shots[i].angle} failed: ${r.reason}`)
+      return null
+    })
+    .filter((r): r is { angle: string; video_url: string } => r !== null)
+
+  if (results.length === 0) throw new Error('All video generations failed — no clips to stitch')
+  console.log(`[muapi] ${results.length}/${shots.length} videos completed`)
   return results
 }
