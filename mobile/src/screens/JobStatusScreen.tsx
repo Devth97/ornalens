@@ -12,7 +12,7 @@ import type { Job, AngleShot } from './types'
 const PIPELINE_STEPS = [
   { key: 'processing',  label: 'Placing jewellery on model',   icon: '👗' },
   { key: 'model_done',  label: 'Generating 5 angle shots',     icon: '📸' },
-  { key: 'shots_done',  label: 'Creating video clips (Kling)', icon: '🎬' },
+  { key: 'shots_done',  label: 'Creating video clips (Seedance)', icon: '🎬' },
   { key: 'videos_done', label: 'Stitching with transitions',    icon: '✂️' },
   { key: 'completed',   label: 'Final video ready!',           icon: '✅' },
 ]
