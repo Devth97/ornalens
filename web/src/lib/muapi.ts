@@ -226,12 +226,12 @@ export async function generateAngleShots(
         'professional luxury jewellery photography, hyperrealistic',
       ].join(', ')
 
-      // flux-kontext-pro-i2i: single reference image only — confirmed working in production
+      // flux-kontext-pro-i2i: valid params per MuAPI schema — prompt, images_list, aspect_ratio ONLY
+      // `strength` is NOT a valid parameter for this endpoint — causes 422 rejection
       const requestId = await submitJob('flux-kontext-pro-i2i', {
         prompt,
-        images_list: [modelImageUrl],  // single ref — dual-ref caused all 5 to fail
+        images_list: [modelImageUrl],
         aspect_ratio: '9:16',
-        strength: 0.20,                // low = stays close to source
       })
 
       const imageUrl = await pollResult(requestId)
