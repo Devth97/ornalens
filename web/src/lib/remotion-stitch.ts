@@ -65,17 +65,34 @@ export async function stitchVideosWithTransitions(
   const inputs = clipPaths.flatMap(p => ['-i', p])
 
   const filterParts: string[] = []
-  let prevLabel = '[0:v]'
+
+  // Step 1 — normalize every clip to same resolution + fps before xfade.
+  // Seedance v1.5 clips can vary in SAR/resolution, causing xfade to fail.
+  const TARGET_W = 720
+  const TARGET_H = 1280
+  const TARGET_FPS = 24
+  const normalizedLabels: string[] = []
+  for (let i = 0; i < clipPaths.length; i++) {
+    const label = `[v${i}]`
+    filterParts.push(
+      `[${i}:v]scale=${TARGET_W}:${TARGET_H}:force_original_aspect_ratio=decrease,` +
+      `pad=${TARGET_W}:${TARGET_H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${TARGET_FPS}${label}`
+    )
+    normalizedLabels.push(label)
+  }
+
+  // Step 2 — chain xfade transitions on normalized streams
+  let prevLabel = normalizedLabels[0]
   for (let i = 1; i < clipPaths.length; i++) {
     const offset = i * (CLIP_DURATION_S - FADE_DURATION_S)
     const outLabel = i === clipPaths.length - 1 ? '[outv]' : `[x${i}]`
     filterParts.push(
-      `${prevLabel}[${i}:v]xfade=transition=fade:duration=${FADE_DURATION_S}:offset=${offset}${outLabel}`
+      `${prevLabel}${normalizedLabels[i]}xfade=transition=fade:duration=${FADE_DURATION_S}:offset=${offset}${outLabel}`
     )
     prevLabel = `[x${i}]`
   }
 
-  console.log(`[stitch] Encoding ${clipPaths.length} clips with xfade crossfade (${FADE_DURATION_S}s)`)
+  console.log(`[stitch] Encoding ${clipPaths.length} clips with xfade crossfade (${FADE_DURATION_S}s) at ${TARGET_W}x${TARGET_H}@${TARGET_FPS}fps`)
 
   await execFileAsync(ffmpeg, [
     ...inputs,
@@ -83,8 +100,8 @@ export async function stitchVideosWithTransitions(
     '-map', '[outv]',
     '-an',               // drop audio — Seedance clips have no meaningful audio
     '-c:v', 'libx264',
-    '-preset', 'fast',   // fast encode, good quality
-    '-crf', '23',        // visually lossless at this crf
+    '-preset', 'fast',
+    '-crf', '23',
     '-movflags', '+faststart',
     '-y', finalPath,
   ])

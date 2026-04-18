@@ -33,33 +33,40 @@ async function downloadToGallery(url: string, filename: string, isVideo = false)
   }
 
   try {
-    // Download to temp cache first
     const ext = isVideo ? 'mp4' : 'jpg'
     const localPath = FileSystem.cacheDirectory + filename + '.' + ext
-    const result = await FileSystem.downloadAsync(url, localPath)
 
-    // Catch bad HTTP responses — downloadAsync doesn't throw on non-200
+    console.log('[Download] Starting:', url)
+    const result = await FileSystem.downloadAsync(url, localPath)
+    console.log('[Download] HTTP status:', result.status, 'uri:', result.uri)
+
     if (result.status !== 200) {
-      throw new Error(`Server returned ${result.status} — URL may have expired`)
+      throw new Error(`Download failed — server returned ${result.status}`)
     }
 
-    // Save to device gallery
-    const asset = await MediaLibrary.createAssetAsync(result.uri)
+    // Verify file has content
+    const fileInfo = await FileSystem.getInfoAsync(result.uri)
+    if (!fileInfo.exists || (fileInfo as any).size === 0) {
+      throw new Error('Downloaded file is empty')
+    }
+    console.log('[Download] File size:', (fileInfo as any).size)
 
-    // copyAsset: true is required on Android (cache dir is app-private; false = move fails)
-    // true = copy into gallery, which works on both iOS and Android
-    const copyAsset = true
+    const asset = await MediaLibrary.createAssetAsync(result.uri)
+    console.log('[Download] Asset created:', asset.id)
+
     const album = await MediaLibrary.getAlbumAsync('Ornalens')
     if (album === null) {
-      await MediaLibrary.createAlbumAsync('Ornalens', asset, copyAsset)
+      await MediaLibrary.createAlbumAsync('Ornalens', asset, true)
     } else {
-      await MediaLibrary.addAssetsToAlbumAsync([asset], album, copyAsset)
+      await MediaLibrary.addAssetsToAlbumAsync([asset], album, true)
     }
 
-    Alert.alert('✅ Saved!', `${filename} saved to your gallery in the "Ornalens" album.`)
+    Alert.alert('✅ Saved!', `Saved to your gallery in the "Ornalens" album.`)
   } catch (e) {
-    console.error('Download failed:', e)
-    Alert.alert('Download failed', String(e))
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[Download] Failed:', msg)
+    // Show exact error so we can diagnose
+    Alert.alert('Download failed', msg)
   }
 }
 

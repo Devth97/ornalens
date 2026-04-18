@@ -20,7 +20,7 @@ const CHARACTER_ANCHOR = [
 // Short face lock — used in Step 2 (Flux) only.
 // Skin/texture details are already baked into the Step 1 output image.
 // Kept short deliberately to stay within MuAPI prompt length limits.
-const FLUX_FACE_LOCK = 'same model as reference image, identical face skin tone makeup and hair preserved exactly'
+const FLUX_FACE_LOCK = 'same model as reference image, identical face skin tone makeup and sleek straight dark hair, clean white studio background, no earrings no rings no extra accessories'
 
 // ─── Outfit options ───────────────────────────────────────────────────────
 // Picked once per job in runPipeline and passed to both Step 1 + Step 2.
@@ -52,19 +52,19 @@ const SHOT_ANGLES = [
   },
   {
     angle: 'three_quarter',
-    composition: 'three-quarter portrait, model at 45-degree angle to camera, jewellery visible against neckline, elegant posture, saree draped over one shoulder clearly visible, soft directional studio lighting, muted dark background, 85mm lens, jewellery in sharp focus',
+    composition: 'three-quarter portrait, model at 45-degree angle to camera, jewellery visible against neckline, elegant posture, saree draped over one shoulder, clean white studio background, soft studio lighting, 85mm lens, jewellery in sharp focus',
   },
   {
     angle: 'close_up',
-    composition: 'medium close-up portrait framed from shoulders to chin, both shoulders clearly visible with saree draped over one shoulder, jewellery centred and prominently displayed against the neckline, studio lighting enhancing gemstone brilliance and precious metal shine, 85mm lens, f/2.0, ultra-sharp on jewellery, soft blurred studio background',
+    composition: 'medium close-up portrait framed from shoulders to chin, both shoulders visible with saree draped over one shoulder, jewellery prominently displayed at neckline, clean white studio background, soft studio lighting, 85mm lens, f/2.0, ultra-sharp on jewellery',
   },
   {
     angle: 'side',
-    composition: 'clean side profile portrait, model facing left, saree draped over shoulder visible, jewellery catching soft window light from the right side, subtle hair tucked behind ear, 85mm lens, shallow depth of field, neutral background, jewellery in sharp focus',
+    composition: 'clean side profile portrait, model facing left, saree draped over shoulder, jewellery visible at neckline catching soft light, clean white studio background, no windows, 85mm lens, shallow depth of field, jewellery in sharp focus',
   },
   {
     angle: 'overhead_tilt',
-    composition: 'slightly elevated camera angle looking down at model, model gazes slightly upward, saree draped elegantly over one shoulder visible, jewellery fully visible and catching warm ambient light, lifestyle luxury aesthetic, 50mm lens, 4K cinematic framing, shallow depth of field',
+    composition: 'slightly elevated camera angle looking down at model, model gazes slightly upward, saree draped over one shoulder, jewellery fully visible at neckline, clean white studio background, soft ambient studio lighting, 50mm lens, shallow depth of field',
   },
 ]
 
