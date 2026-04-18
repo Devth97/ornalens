@@ -22,7 +22,7 @@ const SHOT_ANGLES = [
   },
   {
     angle: 'close_up',
-    composition: 'extreme close-up jewellery hero shot, tight frame on jewellery piece against jawline or neckline, studio macro lighting enhancing gemstone brilliance and precious metal shine, macro lens, f/1.8, hyper-detailed, ultra-sharp on jewellery, background completely blurred, neutral soft studio background',
+    composition: 'medium close-up portrait framed from shoulders to chin, both shoulders clearly visible with saree draped over one shoulder, jewellery centred and prominently displayed against the neckline, studio lighting enhancing gemstone brilliance and precious metal shine, 85mm lens, f/2.0, ultra-sharp on jewellery, soft blurred studio background',
   },
 ]
 
@@ -280,10 +280,9 @@ function buildVideoMotionPrompt(angle: string): string {
       '85mm lens, 4K slow motion, jewellery in sharp focus throughout',
 
     close_up:
-      'extreme close-up of jewellery, model very subtly tilts head causing diamonds and gemstones to catch light and sparkle brilliantly, ' +
-      'brilliant light flare cascades across gemstone surface illuminating each individual facet, ' +
-      'studio macro lighting enhances precious metal shine and gemstone depth, ' +
-      'macro lens, ultra-detailed 4K video, shallow depth of field, jewellery perfectly sharp, background completely blurred',
+      'model subtly shifts shoulders causing the saree drape to settle gracefully, jewellery catches studio light and gemstones sparkle brilliantly, ' +
+      'light flares cascade across gemstone surface illuminating each facet, shoulders and saree drape remain visible throughout, ' +
+      '85mm lens, ultra-detailed 4K video, shallow depth of field, jewellery in perfect sharp focus, soft blurred background',
 
     side:
       'model in clean side profile slowly turns head by a few degrees causing jewellery to catch light and sparkle, ' +

@@ -1,6 +1,6 @@
-// Video stitching — simple copy concat (no re-encoding)
-// Why no fade/xfade: re-encoding on Vercel is unreliable (binary permissions, /tmp limits)
-// -c copy is instant, lossless, and works on any ffmpeg version
+// Video stitching with crossfade transitions via ffmpeg xfade filter
+// Re-encoding with libx264 fast preset is reliable on Vercel for short clips (2-5×5s)
+// xfade requires decoded input — clips must be same resolution and fps (Seedance guarantees this)
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -27,9 +27,15 @@ async function downloadVideo(url: string, destPath: string): Promise<void> {
   await fs.writeFile(destPath, Buffer.from(buffer))
 }
 
+const CLIP_DURATION_S = 5    // Seedance output duration (matches duration: 5 in muapi.ts)
+const FADE_DURATION_S = 0.5  // crossfade overlap between clips
+
 /**
- * Stitch clips using -c copy (no re-encoding).
- * Fast, reliable, works on any ffmpeg. No fade effects needed at this stage.
+ * Stitch clips with smooth crossfade transitions using ffmpeg xfade filter.
+ *
+ * xfade offset formula for N clips chained sequentially:
+ *   transition_i_offset = (i + 1) * (CLIP_DURATION_S - FADE_DURATION_S)
+ * e.g. 2 clips × 5s with 0.5s fade → offset = 4.5s, output = 9.5s total
  */
 export async function stitchVideosWithTransitions(
   videoUrls: string[],
@@ -51,22 +57,34 @@ export async function stitchVideosWithTransitions(
 
   if (clipPaths.length === 1) return clipPaths[0]
 
-  // Write concat manifest
-  const concatListPath = path.join(tmpDir, 'concat_list.txt')
-  const concatContent = clipPaths.map(p => `file '${p}'`).join('\n')
-  await fs.writeFile(concatListPath, concatContent)
-
   const finalPath = path.join(tmpDir, 'final.mp4')
   const ffmpeg = getFfmpegPath()
 
-  console.log(`[stitch] Concatenating ${clipPaths.length} clips with -c copy`)
+  // Build xfade filter chain for N clips
+  // Each clip is a separate -i input; xfade is chained progressively
+  const inputs = clipPaths.flatMap(p => ['-i', p])
 
-  // -c copy = no re-encoding, instant, lossless — avoids all codec/filter issues on Vercel
+  const filterParts: string[] = []
+  let prevLabel = '[0:v]'
+  for (let i = 1; i < clipPaths.length; i++) {
+    const offset = i * (CLIP_DURATION_S - FADE_DURATION_S)
+    const outLabel = i === clipPaths.length - 1 ? '[outv]' : `[x${i}]`
+    filterParts.push(
+      `${prevLabel}[${i}:v]xfade=transition=fade:duration=${FADE_DURATION_S}:offset=${offset}${outLabel}`
+    )
+    prevLabel = `[x${i}]`
+  }
+
+  console.log(`[stitch] Encoding ${clipPaths.length} clips with xfade crossfade (${FADE_DURATION_S}s)`)
+
   await execFileAsync(ffmpeg, [
-    '-f', 'concat',
-    '-safe', '0',
-    '-i', concatListPath,
-    '-c', 'copy',
+    ...inputs,
+    '-filter_complex', filterParts.join(';'),
+    '-map', '[outv]',
+    '-an',               // drop audio — Seedance clips have no meaningful audio
+    '-c:v', 'libx264',
+    '-preset', 'fast',   // fast encode, good quality
+    '-crf', '23',        // visually lossless at this crf
     '-movflags', '+faststart',
     '-y', finalPath,
   ])
