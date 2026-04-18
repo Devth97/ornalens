@@ -1,10 +1,9 @@
 // POST /api/jobs — create job + kick off full pipeline async
 // GET  /api/jobs — list jobs for authenticated user
 
-// Pipeline takes 8-15 min (NanoBanana + 5×Flux + 5×Seedance sequential).
-// Hobby plan max is 300s. Pro plan max is 800s.
-// 300s gets through Steps 1+2 and ~3 Seedance clips on average.
-// The stitch fallback handles partial completions gracefully.
+// Pipeline: NanoBanana (Step 1) + 5×Flux parallel (Step 2) + 5×Seedance sequential (Step 3) + ffmpeg xfade stitch (Step 4)
+// Total runtime: 8–15 min. Vercel Hobby maxDuration=300s covers Steps 1+2 and ~3 Seedance clips.
+// Stitch fallback: if stitch fails or times out, first video clip is used as final video.
 export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'

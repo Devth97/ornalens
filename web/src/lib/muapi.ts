@@ -14,15 +14,26 @@ const CHARACTER_ANCHOR = [
 // Each angle changes ONLY camera/composition — model, clothing, jewellery unchanged.
 // Luxury Brand Formula: Minimal Subject + Premium Environment + Soft Lighting +
 //   Texture Focus + Elegant Camera Angle (from AI Video Creation Guide)
-// TEMPORARY — 2 angles only to test stitch + Remotion transitions. Restore all 5 after confirming.
 const SHOT_ANGLES = [
   {
     angle: 'front',
     composition: 'full portrait, model facing camera directly, jewellery centred and fully visible at neckline, clean white studio background, soft diffused front lighting, professional luxury jewellery campaign, 85mm lens, f/2.0, sharp on jewellery',
   },
   {
+    angle: 'three_quarter',
+    composition: 'three-quarter portrait, model at 45-degree angle to camera, jewellery visible against neckline, elegant posture, saree draped over one shoulder clearly visible, soft directional studio lighting, muted dark background, 85mm lens, jewellery in sharp focus',
+  },
+  {
     angle: 'close_up',
     composition: 'medium close-up portrait framed from shoulders to chin, both shoulders clearly visible with saree draped over one shoulder, jewellery centred and prominently displayed against the neckline, studio lighting enhancing gemstone brilliance and precious metal shine, 85mm lens, f/2.0, ultra-sharp on jewellery, soft blurred studio background',
+  },
+  {
+    angle: 'side',
+    composition: 'clean side profile portrait, model facing left, saree draped over shoulder visible, jewellery catching soft window light from the right side, subtle hair tucked behind ear, 85mm lens, shallow depth of field, neutral background, jewellery in sharp focus',
+  },
+  {
+    angle: 'overhead_tilt',
+    composition: 'slightly elevated camera angle looking down at model, model gazes slightly upward, saree draped elegantly over one shoulder visible, jewellery fully visible and catching warm ambient light, lifestyle luxury aesthetic, 50mm lens, 4K cinematic framing, shallow depth of field',
   },
 ]
 
