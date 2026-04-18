@@ -2,9 +2,10 @@
 // GET  /api/jobs — list jobs for authenticated user
 
 // Pipeline takes 8-15 min (NanoBanana + 5×Flux + 5×Seedance sequential).
-// Without this, Vercel kills at 60s (Hobby) / 300s (Pro) and MuAPI credits
-// are consumed with no result. 800 is the Vercel Pro plan maximum.
-export const maxDuration = 800
+// Hobby plan max is 300s. Pro plan max is 800s.
+// 300s gets through Steps 1+2 and ~3 Seedance clips on average.
+// The stitch fallback handles partial completions gracefully.
+export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
