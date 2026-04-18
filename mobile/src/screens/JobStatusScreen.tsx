@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, Image, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Linking, Share, Alert
+  StyleSheet, ActivityIndicator, Linking, Share, Alert, Platform
 } from 'react-native'
 import { useRoute } from '@react-navigation/native'
 import * as FileSystem from 'expo-file-system'
@@ -32,23 +32,28 @@ async function downloadToGallery(url: string, filename: string, isVideo = false)
     return
   }
 
-  Alert.alert('Downloading…', `Saving ${filename} to your gallery`)
-
   try {
     // Download to temp cache first
     const ext = isVideo ? 'mp4' : 'jpg'
     const localPath = FileSystem.cacheDirectory + filename + '.' + ext
-    const { uri } = await FileSystem.downloadAsync(url, localPath)
+    const result = await FileSystem.downloadAsync(url, localPath)
+
+    // Catch bad HTTP responses — downloadAsync doesn't throw on non-200
+    if (result.status !== 200) {
+      throw new Error(`Server returned ${result.status} — URL may have expired`)
+    }
 
     // Save to device gallery
-    const asset = await MediaLibrary.createAssetAsync(uri)
+    const asset = await MediaLibrary.createAssetAsync(result.uri)
 
-    // Put in a named album for easy finding
+    // copyAsset: true is required on Android (cache dir is app-private; false = move fails)
+    // true = copy into gallery, which works on both iOS and Android
+    const copyAsset = true
     const album = await MediaLibrary.getAlbumAsync('Ornalens')
     if (album === null) {
-      await MediaLibrary.createAlbumAsync('Ornalens', asset, false)
+      await MediaLibrary.createAlbumAsync('Ornalens', asset, copyAsset)
     } else {
-      await MediaLibrary.addAssetsToAlbumAsync([asset], album, false)
+      await MediaLibrary.addAssetsToAlbumAsync([asset], album, copyAsset)
     }
 
     Alert.alert('✅ Saved!', `${filename} saved to your gallery in the "Ornalens" album.`)
