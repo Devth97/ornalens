@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator
@@ -111,7 +111,7 @@ export default function SignInScreen() {
         <View style={styles.inner}>
           <View style={styles.logoArea}>
             <Text style={styles.logoGem}>◆</Text>
-            <Text style={styles.logoText}>OrnalLens</Text>
+            <Text style={styles.logoText}>Ornalens</Text>
             <Text style={styles.tagline}>Check your email for a 6-digit code</Text>
           </View>
           <View style={styles.form}>
@@ -153,7 +153,7 @@ export default function SignInScreen() {
       <View style={styles.inner}>
         <View style={styles.logoArea}>
           <Text style={styles.logoGem}>◆</Text>
-          <Text style={styles.logoText}>OrnalLens</Text>
+          <Text style={styles.logoText}>Ornalens</Text>
           <Text style={styles.tagline}>AI Jewellery Photography Studio</Text>
         </View>
 
@@ -196,7 +196,7 @@ export default function SignInScreen() {
           <TouchableOpacity onPress={() => setMode(m => m === 'signin' ? 'signup' : 'signin')}>
             <Text style={styles.switchText}>
               {mode === 'signin'
-                ? 'New to OrnalLens? Create account'
+                ? 'New to Ornalens? Create account'
                 : 'Already have an account? Sign in'}
             </Text>
           </TouchableOpacity>

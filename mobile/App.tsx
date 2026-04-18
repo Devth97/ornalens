@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+﻿import React, { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { ClerkProvider, useAuth } from '@clerk/expo'
 import { tokenCache } from '@clerk/expo/token-cache'
@@ -57,7 +57,7 @@ function AppNavigator() {
           <Stack.Screen name="SignIn" component={SignInScreen} options={{ headerShown: false }} />
         ) : (
           <>
-            <Stack.Screen name="Home" component={HomeScreen} options={{ title: '✦ OrnalLens' }} />
+            <Stack.Screen name="Home" component={HomeScreen} options={{ title: '✦ Ornalens' }} />
             <Stack.Screen name="NewJob" component={NewJobScreen} options={{ title: 'New Shoot' }} />
             <Stack.Screen name="JobStatus" component={JobStatusScreen} options={{ title: 'Processing' }} />
           </>

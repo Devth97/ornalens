@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+﻿import React, { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, Image, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, Linking, Share, Alert
@@ -44,14 +44,14 @@ async function downloadToGallery(url: string, filename: string, isVideo = false)
     const asset = await MediaLibrary.createAssetAsync(uri)
 
     // Put in a named album for easy finding
-    const album = await MediaLibrary.getAlbumAsync('OrnalLens')
+    const album = await MediaLibrary.getAlbumAsync('Ornalens')
     if (album === null) {
-      await MediaLibrary.createAlbumAsync('OrnalLens', asset, false)
+      await MediaLibrary.createAlbumAsync('Ornalens', asset, false)
     } else {
       await MediaLibrary.addAssetsToAlbumAsync([asset], album, false)
     }
 
-    Alert.alert('✅ Saved!', `${filename} saved to your gallery in the "OrnalLens" album.`)
+    Alert.alert('✅ Saved!', `${filename} saved to your gallery in the "Ornalens" album.`)
   } catch (e) {
     console.error('Download failed:', e)
     Alert.alert('Download failed', String(e))

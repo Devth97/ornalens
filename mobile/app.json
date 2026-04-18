@@ -1,6 +1,6 @@
-{
+﻿{
   "expo": {
-    "name": "OrnalLens",
+    "name": "Ornalens",
     "slug": "ornalens",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -29,8 +29,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "OrnalLens needs access to your photos to upload jewellery images.",
-          "cameraPermission": "OrnalLens needs camera access to capture jewellery photos."
+          "photosPermission": "Ornalens needs access to your photos to upload jewellery images.",
+          "cameraPermission": "Ornalens needs camera access to capture jewellery photos."
         }
       ]
     ],
