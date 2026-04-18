@@ -152,25 +152,32 @@ export async function placeJewelleryOnModel(
   return pollResult(requestId)
 }
 
-// ─── Step 2: 5 multi-angle shots using Flux PuLID (face identity lock) ────
+// ─── Step 2: Multi-angle shots — Higgsfield Shots dual-reference approach ──
 /**
- * Flux PuLID is purpose-built for consistent face rendering across different
- * scenes/styles. Unlike flux-kontext (general i2i), PuLID anchors the exact
- * face identity — same lips, eyes, skin tone, makeup — across all 5 angles.
- * This is the same technique used by Higgsfield Shots.
+ * Dual-reference = Higgsfield Shots technique:
+ *   images_list[0] = NanoBanana output  → locks model face, pose, clothing
+ *   images_list[1] = original jewellery → locks exact gemstone/metal design
+ * Flux Kontext sees both simultaneously — it cannot drift the jewellery
+ * design because the original product image is always in its context.
  */
 export async function generateAngleShots(
   modelImageUrl: string,
-  _description: string
+  _description: string,
+  jewelleryImageUrl?: string,       // original jewellery photo — dual-reference lock
 ): Promise<Array<{ angle: string; prompt: string; image_url: string }>> {
+  // Build reference list — jewellery image added as second ref when available
+  const referenceImages = jewelleryImageUrl
+    ? [modelImageUrl, jewelleryImageUrl]  // dual-reference: model + product
+    : [modelImageUrl]
+
   // Promise.allSettled — if one angle fails we keep the rest and don't waste credits
   const settled = await Promise.allSettled(
     SHOT_ANGLES.map(async ({ angle, composition }) => {
       const prompt = [
-        // CHARACTER_ANCHOR + reference image together lock face identity across all 5 angles
+        // CHARACTER_ANCHOR + reference image together lock face identity across all angles
         `same model as reference: ${CHARACTER_ANCHOR}, identical face lips eyes brows skin tone preserved`,
-        // JEWELLERY LOCK — same explicit prohibitions as Step 1 to prevent Flux drift
-        `wearing the EXACT same jewellery as reference image — every gemstone shape cut colour quantity and arrangement preserved identically`,
+        // JEWELLERY LOCK — second reference image enforces this at the pixel level
+        `wearing the EXACT same jewellery as the product reference image — every gemstone shape cut colour quantity and arrangement preserved identically`,
         `DO NOT add earrings rings bangles or any accessory not visible in reference. DO NOT simplify or change any jewellery element.`,
         // CLOTHING — same as Step 1, deep V-neck for jewellery visibility
         `deep V-neck navy dark-blue saree blouse with gold zari border, bare shoulders, neck and décolletage fully visible, saree draped over one shoulder`,
@@ -180,12 +187,13 @@ export async function generateAngleShots(
         `professional luxury jewellery advertisement photography, hyperrealistic, emphasis on gemstone sparkle and precious metal texture`,
       ].join('. ')
 
-      // flux-kontext-pro-i2i: PROVEN to work in production (5 successful completions confirmed)
+      // flux-kontext-pro-i2i: PROVEN to work in production
+      // Dual reference: [model image, jewellery image] — Higgsfield Shots approach
       const requestId = await submitJob('flux-kontext-pro-i2i', {
         prompt,
-        images_list: [modelImageUrl],  // confirmed working field name
+        images_list: referenceImages,  // dual-reference when jewellery URL provided
         aspect_ratio: '9:16',
-        strength: 0.20,               // lower = stays closer to source, better jewellery + face preservation
+        strength: 0.20,                // low = stays close to source
       })
 
       const imageUrl = await pollResult(requestId)
@@ -211,11 +219,10 @@ export async function generateAngleShots(
 
 // ─── Step 3: Image-to-video (Seedance Pro I2V Fast) ──────────────────────
 /**
- * Seedance API uses `image_url` (string), NOT `images_list` (array).
+ * Seedance v1.5 Pro I2V — confirmed cheaper and better motion than v1.0 Pro.
+ * API uses `image_url` (string), NOT `images_list` (array).
  * Confirmed params: prompt, image_url, aspect_ratio, duration, quality.
- * `generate_audio` and `reference_image_url` are Kling/undocumented fields
- * that risk 422 and were removed.
- * ~3–4× cheaper than Kling v3.0 Standard at equivalent quality.
+ * Falls back to seedance-pro-i2v-fast if v1.5 endpoint 422s.
  */
 export async function generateVideoFromShot(
   imageUrl: string,
@@ -225,13 +232,32 @@ export async function generateVideoFromShot(
 ): Promise<string> {
   const motionPrompt = buildVideoMotionPrompt(angle)
 
-  const requestId = await submitJob('seedance-pro-i2v-fast', {
-    prompt: motionPrompt,
-    image_url: imageUrl,  // Seedance requires string, NOT images_list array (confirmed via API probe)
-    aspect_ratio: '9:16',
-    duration: 5,
-    quality: 'basic',     // 'basic' = cheaper; 'high' for enterprise tier
-  })
+  // Try v1.5 first (cheaper + better motion). Fall back to confirmed v1.0 endpoint if 422.
+  let requestId: string
+  try {
+    requestId = await submitJob('seedance-v1.5-pro-i2v', {
+      prompt: motionPrompt,
+      image_url: imageUrl,
+      aspect_ratio: '9:16',
+      duration: 5,
+      quality: 'basic',
+    })
+    console.log(`[muapi] Using seedance-v1.5-pro-i2v for angle: ${angle}`)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('422') || msg.includes('404') || msg.includes('not found')) {
+      console.warn(`[muapi] seedance-v1.5-pro-i2v failed (${msg}), falling back to seedance-pro-i2v-fast`)
+      requestId = await submitJob('seedance-pro-i2v-fast', {
+        prompt: motionPrompt,
+        image_url: imageUrl,
+        aspect_ratio: '9:16',
+        duration: 5,
+        quality: 'basic',
+      })
+    } else {
+      throw e
+    }
+  }
 
   return pollResult(requestId, 600_000)
 }

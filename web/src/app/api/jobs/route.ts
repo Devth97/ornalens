@@ -9,13 +9,13 @@ export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-import { auth } from '@clerk/nextjs/server'
+import { getAuthUserId } from '@/lib/get-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { placeJewelleryOnModel, generateAngleShots, generateAllVideoClips } from '@/lib/muapi'
 import { stitchVideosWithTransitions, uploadFinalVideo } from '@/lib/remotion-stitch'
 
-export async function GET() {
-  const { userId } = await auth()
+export async function GET(req: NextRequest) {
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data, error } = await supabaseAdmin
@@ -30,7 +30,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth()
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
@@ -92,8 +92,8 @@ async function runPipeline(
     console.log(`[pipeline:${jobId}] Model image: ${modelImageUrl}`)
 
     // ── Step 2: Multi-angle shots ──────────────────────────────────────
-    console.log(`[pipeline:${jobId}] Step 2: Generating 5 angle shots`)
-    const shots = await generateAngleShots(modelImageUrl, description)
+    console.log(`[pipeline:${jobId}] Step 2: Generating angle shots (dual-reference: model + jewellery)`)
+    const shots = await generateAngleShots(modelImageUrl, description, jewelleryImageUrl)
     await updateJob(jobId, {
       status: 'shots_done',
       angle_shots: shots.map(s => ({ ...s, video_url: null })),
@@ -101,7 +101,7 @@ async function runPipeline(
     console.log(`[pipeline:${jobId}] Generated ${shots.length} shots`)
 
     // ── Step 3: MuAPI Seedance Pro I2V Fast — video per shot ──────────────
-    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Seedance Pro I2V Fast)`)
+    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Seedance v1.5 Pro I2V)`)
     const videoClips = await generateAllVideoClips(shots, description, modelImageUrl)
 
     const shotsWithVideos = shots.map((shot, i) => ({
