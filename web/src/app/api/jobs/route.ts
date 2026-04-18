@@ -1,6 +1,11 @@
 // POST /api/jobs — create job + kick off full pipeline async
 // GET  /api/jobs — list jobs for authenticated user
 
+// Pipeline takes 8-15 min (NanoBanana + 5×Flux + 5×Seedance sequential).
+// Without this, Vercel kills at 60s (Hobby) / 300s (Pro) and MuAPI credits
+// are consumed with no result. 800 is the Vercel Pro plan maximum.
+export const maxDuration = 800
+
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { auth } from '@clerk/nextjs/server'
@@ -94,9 +99,9 @@ async function runPipeline(
     })
     console.log(`[pipeline:${jobId}] Generated ${shots.length} shots`)
 
-    // ── Step 3: MuAPI Kling v3.0 — video per shot ──────────────────────
-    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Kling v3.0)`)
-    const videoClips = await generateAllVideoClips(shots, description)
+    // ── Step 3: MuAPI Seedance Pro I2V Fast — video per shot ──────────────
+    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Seedance Pro I2V Fast)`)
+    const videoClips = await generateAllVideoClips(shots, description, modelImageUrl)
 
     const shotsWithVideos = shots.map((shot, i) => ({
       ...shot,

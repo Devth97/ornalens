@@ -1,28 +1,39 @@
 // MuAPI client — jewellery placement, multi-angle shots, video generation
 const BASE_URL = 'https://api.muapi.ai'
 
+// ─── Character anchor ─────────────────────────────────────────────────────
+// Locked across ALL prompts — prevents model drift between angles and videos.
+// Skin tone intentionally omitted here; injected dynamically from modelStyle.
+const CHARACTER_ANCHOR = [
+  'modern elegant Indian woman, mid-20s, sharp jawline, almond-shaped dark brown eyes, sleek straight dark hair',
+  'soft bridal makeup, warm nude-rose lips, natural kajal-lined eyes, subtle golden highlighter',
+  'refined confident expression, photorealistic skin texture, natural pores',
+].join(', ')
+
 // ─── Angle shot definitions ───────────────────────────────────────────────
-// Each angle changes ONLY camera composition — model, clothing, jewellery unchanged
+// Each angle changes ONLY camera/composition — model, clothing, jewellery unchanged.
+// Luxury Brand Formula: Minimal Subject + Premium Environment + Soft Lighting +
+//   Texture Focus + Elegant Camera Angle (from AI Video Creation Guide)
 const SHOT_ANGLES = [
   {
     angle: 'front',
-    composition: 'front view portrait, face-on, eye-level, 50mm lens, f/4, soft studio lighting, full necklace visible, clean white background',
+    composition: 'front portrait, model walks slowly toward camera, hair flows naturally with one side tucked to reveal jewellery, golden-hour soft light catches gemstone sparkle, 50mm lens, f/2.8, shallow depth of field, jewellery in sharp focus, minimal luxury lifestyle background',
   },
   {
     angle: 'three_quarter',
-    composition: 'three-quarter view, slight left turn showing jawline, 50mm lens, f/4, studio lighting, full necklace visible, white background',
+    composition: 'over-the-shoulder glamour shot, model turns slightly over shoulder toward camera, hair tucked behind ear fully revealing jewellery, dramatic studio lighting with soft highlights reflecting on precious stones, 85mm lens, f/2.0, dark muted luxury background, cinematic campaign feel, focus locks on jewellery',
   },
   {
     angle: 'close_up',
-    composition: 'upper body and face portrait, 85mm lens, f/2.8, necklace in sharp focus, model face visible, elegant studio lighting',
+    composition: 'extreme close-up jewellery hero shot, tight frame on jewellery piece against jawline or neckline, studio macro lighting enhancing gemstone brilliance and precious metal shine, macro lens, f/1.8, hyper-detailed, ultra-sharp on jewellery, background completely blurred, neutral soft studio background',
   },
   {
     angle: 'side',
-    composition: 'side profile portrait, 35mm lens, f/4, elegant pose, necklace drape fully visible, white studio background',
+    composition: 'clean side profile editorial, model in full side profile revealing jewellery completely, soft natural window light falls across face causing diamonds and gemstones to sparkle, 85mm lens, f/2.0, shallow depth of field, neutral background, jewellery in sharp focus, luxury editorial photography',
   },
   {
     angle: 'overhead_tilt',
-    composition: 'slight high-angle editorial portrait, 35mm lens, f/5.6, dramatic lighting, full necklace layout visible',
+    composition: 'seated luxury lifestyle shot, model seated gracefully in a minimal premium setting, gently adjusts hair behind ear drawing attention to jewellery, warm ambient lighting enhances gold tones and gemstone colour, 50mm lens, f/2.8, soft blurred background, premium jewellery campaign aesthetic, clear focus on jewellery',
   },
 ]
 
@@ -41,32 +52,57 @@ async function submitJob(endpoint: string, body: Record<string, unknown>): Promi
     throw new Error(`MuAPI [${endpoint}] submit failed: ${res.status} ${text}`)
   }
   const data = await res.json()
-  return data.request_id
+  // Validate the job ID exists — if missing, polling /undefined/result wastes 5-10 min
+  const requestId: string | undefined = data.request_id ?? data.id ?? data.prediction_id
+  if (!requestId) {
+    throw new Error(`MuAPI [${endpoint}] submit succeeded but no request_id in response. Keys: ${Object.keys(data).join(', ')}`)
+  }
+  return requestId
 }
 
 async function pollResult(requestId: string, maxWaitMs = 300_000): Promise<string> {
   const start = Date.now()
+  let delay = 4000
+
   while (Date.now() - start < maxWaitMs) {
-    await new Promise(r => setTimeout(r, 4000))
+    await new Promise(r => setTimeout(r, delay))
+
     const res = await fetch(`${BASE_URL}/api/v1/predictions/${requestId}/result`, {
       headers: { 'x-api-key': process.env.MUAPI_KEY! },
     })
-    if (!res.ok) continue
+
+    // 429 rate-limit: back off exponentially instead of hammering
+    if (res.status === 429) {
+      delay = Math.min(delay * 2, 30_000)
+      console.warn(`[muapi] poll 429 rate-limit, backing off to ${delay / 1000}s`)
+      continue
+    }
+
+    if (!res.ok) {
+      console.warn(`[muapi] poll non-ok ${res.status} for ${requestId}, retrying`)
+      continue
+    }
+
+    // Reset delay on successful poll
+    delay = 4000
+
     const data = await res.json()
     const status = (data.status || '').toLowerCase()
+
     if (['completed', 'succeeded', 'success'].includes(status)) {
       // Check all known output field names across MuAPI endpoints:
       // nano-banana/flux → outputs[0] or image or url
-      // kling-i2v → video
+      // seedance/kling i2v → video or video_url
       const result = data.outputs?.[0] ?? data.video ?? data.image ?? data.video_url ?? data.url ?? data.output
       if (!result) throw new Error(`MuAPI job completed but no output URL found. Keys: ${Object.keys(data).join(', ')}`)
       return result
     }
+
     if (['failed', 'error'].includes(status)) {
-      throw new Error(`MuAPI job failed: ${data.error || status}`)
+      throw new Error(`MuAPI job failed: ${data.error || data.message || status}`)
     }
   }
-  throw new Error(`MuAPI job timed out after ${maxWaitMs / 1000}s`)
+  throw new Error(`MuAPI job timed out after ${maxWaitMs / 1000}s (request_id: ${requestId})`)
 }
 
 export async function uploadToMuAPI(imageBuffer: Buffer, filename: string): Promise<string> {
@@ -99,18 +135,14 @@ export async function placeJewelleryOnModel(
   const pose = modelStyle.pose ?? 'standing'
 
   const prompt = [
-    // Who is wearing
-    `Indian female model, ${skinTone} skin tone, ${bodyType} build, ${pose} pose, calm elegant expression`,
+    // CHARACTER_ANCHOR locks face/makeup/expression — prevents drift across all 5 angle shots
+    `${CHARACTER_ANCHOR}, ${skinTone} skin tone, ${bodyType} build, ${pose} pose`,
     // JEWELLERY: read from image — do NOT describe design in text
-    `wearing the exact necklace jewellery shown in the reference image — copy every gemstone shape color arrangement and metal detail with pixel-perfect accuracy, do not alter the jewellery in any way`,
-    // CLOTHING — deep V-neck saree blouse, shoulders bare, neck fully exposed for maximum jewellery visibility
-    `wearing a deep V-neck Indian saree blouse in rich navy dark-blue with gold zari border, bare shoulders, décolletage and full neck clearly visible to showcase the necklace beautifully, saree draped elegantly over one shoulder`,
-    // MAKEUP — define clearly so it stays consistent across angles
-    `soft bridal makeup, warm nude-rose lip colour, natural kajal-lined eyes, subtle golden highlighter, groomed brows`,
-    // SKIN — subtle realism
-    `photorealistic skin, natural pores, soft golden warmth, no heavy airbrushing`,
-    // SCENE
-    `professional jewellery photography, clean white studio background, soft diffused lighting`,
+    `wearing the exact ${description} jewellery shown in the reference image — copy every gemstone shape colour arrangement and metal detail with pixel-perfect accuracy, do not alter the jewellery in any way`,
+    // CLOTHING — deep V-neck for maximum jewellery visibility at neckline and ears
+    `wearing a deep V-neck Indian saree blouse in rich navy dark-blue with gold zari border, bare shoulders, décolletage and full neck clearly visible to showcase the jewellery beautifully, saree draped elegantly over one shoulder`,
+    // SCENE — luxury formula: minimal subject + premium environment + soft lighting
+    `professional jewellery photography, clean white studio background, soft diffused lighting, emphasis on texture and reflections`,
     `hyperrealistic, Phase One IQ4 camera quality, 9:16 portrait`,
   ].join(', ')
 
@@ -137,25 +169,23 @@ export async function generateAngleShots(
   modelImageUrl: string,
   _description: string
 ): Promise<Array<{ angle: string; prompt: string; image_url: string }>> {
-  const results = await Promise.all(
+  // Promise.allSettled — if one angle fails we keep the rest and don't waste credits
+  const settled = await Promise.allSettled(
     SHOT_ANGLES.map(async ({ angle, composition }) => {
       const prompt = [
-        // Identity anchor — PuLID reads face from reference image
-        `same Indian female model from reference image, identical face features lips eyes brows skin tone`,
+        // CHARACTER_ANCHOR + reference image together lock face identity across all 5 angles
+        `same model as reference: ${CHARACTER_ANCHOR}, identical face lips eyes brows skin tone preserved`,
         // JEWELLERY — must not change
-        `wearing the exact same necklace jewellery as reference — same gemstones same metal same arrangement, do not alter jewellery`,
-        // CLOTHING — same as Step 1, deep V-neck for necklace visibility
+        `wearing the exact same jewellery as reference — same gemstones same metal same arrangement, do not alter jewellery`,
+        // CLOTHING — same as Step 1, deep V-neck for jewellery visibility
         `deep V-neck navy dark-blue saree blouse with gold zari border, bare shoulders, neck and décolletage fully visible, saree draped over one shoulder`,
-        // MAKEUP — lock these explicitly to prevent drift
-        `identical makeup as reference: warm nude-rose lips, natural kajal eyes, subtle golden highlighter`,
-        // Camera angle — only thing that changes
+        // Camera angle — only thing that changes per shot
         composition,
-        // Quality
-        `professional jewellery advertisement photography, hyperrealistic, clean white studio background`,
+        // Quality — luxury formula: texture focus + elegant camera angle
+        `professional luxury jewellery advertisement photography, hyperrealistic, emphasis on gemstone sparkle and precious metal texture`,
       ].join(', ')
 
       // flux-kontext-pro-i2i: PROVEN to work in production (5 successful completions confirmed)
-      // flux-pulid was switched in but never tested — reverting to safe known endpoint
       const requestId = await submitJob('flux-kontext-pro-i2i', {
         prompt,
         images_list: [modelImageUrl],  // confirmed working field name
@@ -167,54 +197,106 @@ export async function generateAngleShots(
       return { angle, prompt, image_url: imageUrl }
     })
   )
-  return results
+
+  const successes = settled
+    .map((r, i) => {
+      if (r.status === 'fulfilled') return r.value
+      console.error(`[muapi] Angle shot ${SHOT_ANGLES[i].angle} failed: ${r.reason}`)
+      return null
+    })
+    .filter((r): r is { angle: string; prompt: string; image_url: string } => r !== null)
+
+  if (successes.length === 0) {
+    throw new Error('All 5 angle shots failed — no images to proceed with')
+  }
+
+  console.log(`[muapi] ${successes.length}/5 angle shots succeeded`)
+  return successes
 }
 
-// ─── Step 3: Image-to-video (Kling v3.0 Standard) ────────────────────────
+// ─── Step 3: Image-to-video (Seedance Pro I2V Fast) ──────────────────────
 /**
- * Correct Kling field: image_url (string) NOT images_list (array)
+ * Seedance API uses `images_list` (array), NOT `image_url` (string).
+ * Confirmed params: prompt, images_list, aspect_ratio, duration, quality.
+ * `generate_audio` and `reference_image_url` are Kling/undocumented fields
+ * that risk 422 and were removed.
+ * ~3–4× cheaper than Kling v3.0 Standard at equivalent quality.
  */
 export async function generateVideoFromShot(
   imageUrl: string,
   angle: string,
-  _description: string
+  _description: string,
+  _modelImageUrl?: string,
 ): Promise<string> {
   const motionPrompt = buildVideoMotionPrompt(angle)
 
-  // Valid params per MuAPI docs: prompt, image_url, duration, generate_audio
-  // REMOVED: aspect_ratio (not valid), cfg_scale (not valid) — were causing silent failures
-  const requestId = await submitJob('kling-v3.0-standard-image-to-video', {
+  const requestId = await submitJob('seedance-pro-i2v-fast', {
     prompt: motionPrompt,
-    image_url: imageUrl,
+    image_url: imageUrl,  // Seedance requires string, NOT images_list array (confirmed via API probe)
+    aspect_ratio: '9:16',
     duration: 5,
-    generate_audio: false,  // prevents audio track conflicts in FFmpeg concat
+    quality: 'basic',     // 'basic' = cheaper; 'high' for enterprise tier
   })
 
   return pollResult(requestId, 600_000)
 }
 
+// Motion Prompt Formula (from AI Video Creation Guide):
+// Camera Movement + Subject Motion + Environmental Effects + Speed + Mood
+// + Jewelry-Specific: focus-tracks-jewellery, sparkle/flare language, lens specs
 function buildVideoMotionPrompt(angle: string): string {
   const motionMap: Record<string, string> = {
-    front:         'model gently tilts her head and smiles softly, necklace catches the studio light elegantly, slow graceful movement, luxury jewellery advertisement',
-    three_quarter: 'model slowly turns from three-quarter toward camera, necklace shimmers beautifully, smooth elegant motion, high fashion',
-    close_up:      'subtle slow camera pull-back revealing the necklace and model face, gemstones sparkle with studio lighting, cinematic jewellery reveal',
-    side:          'model gracefully turns her head from side profile toward camera, necklace drapes catch the light, smooth elegant fashion motion',
-    overhead_tilt: 'camera slowly descends from high angle to eye-level, dramatic jewellery reveal, editorial luxury fashion',
+    front:
+      'model walks slowly toward camera in a minimal luxury setting, hair moves naturally with one side tucked revealing jewellery, ' +
+      'golden-hour sunlight creates soft glow and sparkle on gemstones, jewellery stays highlighted throughout, ' +
+      '50mm lens, shallow depth of field, focus tracks jewellery as she moves, ' +
+      '4K ultra-realistic cinematic video, 60fps slow motion, elegant luxury jewellery campaign feel',
+
+    three_quarter:
+      'model turns gently over her shoulder toward camera, hair tucked behind ear revealing jewellery, subtle elegant pace, ' +
+      'controlled studio lighting creates soft highlights and reflections on precious stones, ' +
+      'focus tracks jewellery as she moves, dark muted background, cinematic contrast, ' +
+      '85mm lens, 4K slow motion, jewellery in sharp focus throughout',
+
+    close_up:
+      'extreme close-up of jewellery, model very subtly tilts head causing diamonds and gemstones to catch light and sparkle brilliantly, ' +
+      'brilliant light flare cascades across gemstone surface illuminating each individual facet, ' +
+      'studio macro lighting enhances precious metal shine and gemstone depth, ' +
+      'macro lens, ultra-detailed 4K video, shallow depth of field, jewellery perfectly sharp, background completely blurred',
+
+    side:
+      'model in clean side profile slowly turns head by a few degrees causing jewellery to catch light and sparkle, ' +
+      'soft natural window light falls across face, diamonds and gemstones throw brilliant light flares with each subtle movement, ' +
+      '85mm lens, shallow depth of field, 4K ultra-realistic cinematic video, 60fps slow motion, ' +
+      'neutral background, jewellery remains in sharp focus throughout',
+
+    overhead_tilt:
+      'model seated gracefully, gently adjusts hair behind ear naturally revealing jewellery, ' +
+      'warm ambient lighting enhances gold tones and gemstone colour, slow controlled elegant movement, ' +
+      'soft shadows, premium lifestyle aesthetic, ' +
+      '50mm lens, 4K cinematic framing, shallow depth of field, focus remains on jewellery',
   }
-  return motionMap[angle] ?? 'model moves gracefully, jewellery shimmers in studio light, elegant slow motion, cinematic fashion film'
+  return (
+    motionMap[angle] ??
+    'model moves gracefully, jewellery catches studio light brilliantly, gemstones sparkle with each subtle movement, ' +
+    'focus tracks jewellery throughout, 4K slow motion, cinematic luxury jewellery campaign'
+  )
 }
 
 /**
- * Generate all 5 video clips sequentially (avoids MuAPI rate limits)
+ * Generate all 5 video clips sequentially (avoids MuAPI rate limits).
+ * modelImageUrl is the NanoBanana output — passed as a secondary reference
+ * to Seedance for consistent face/jewellery identity across all clips.
  */
 export async function generateAllVideoClips(
   shots: Array<{ angle: string; image_url: string }>,
-  description: string
+  description: string,
+  modelImageUrl?: string,
 ): Promise<Array<{ angle: string; video_url: string }>> {
   const results: Array<{ angle: string; video_url: string }> = []
   for (const shot of shots) {
     console.log(`[muapi] Generating video for angle: ${shot.angle}`)
-    const videoUrl = await generateVideoFromShot(shot.image_url, shot.angle, description)
+    const videoUrl = await generateVideoFromShot(shot.image_url, shot.angle, description, modelImageUrl)
     results.push({ angle: shot.angle, video_url: videoUrl })
   }
   return results
