@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, Image, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Linking, Share, Alert, Platform
+  StyleSheet, ActivityIndicator, Linking, Share, Alert
 } from 'react-native'
 import { useRoute } from '@react-navigation/native'
 import * as FileSystem from 'expo-file-system'
@@ -11,7 +11,7 @@ import type { Job, AngleShot } from './types'
 
 const PIPELINE_STEPS = [
   { key: 'processing',  label: 'Placing jewellery on model',   icon: '👗' },
-  { key: 'model_done',  label: 'Generating 5 angle shots',     icon: '📸' },
+  { key: 'model_done',  label: 'Generating angle shots',        icon: '📸' },
   { key: 'shots_done',  label: 'Creating video clips (Seedance)', icon: '🎬' },
   { key: 'videos_done', label: 'Stitching with transitions',    icon: '✂️' },
   { key: 'completed',   label: 'Final video ready!',           icon: '✅' },
