@@ -150,8 +150,8 @@ export async function placeJewelleryOnModel(
     `Copy every metal element — chain links, pendant shape, hanging bars, fringe details — exactly as shown.`,
     `DO NOT add earrings, rings, bangles, maang tikka, nose ring, or ANY accessory not present in the reference image.`,
     `DO NOT simplify, stylise, resize, or alter any part of the jewellery design. The jewellery is locked.`,
-    // CLOTHING — deep V-neck for maximum jewellery visibility
-    `wearing a deep V-neck Indian saree blouse in rich navy dark-blue with gold zari border, bare shoulders, décolletage and full neck clearly visible to showcase the jewellery beautifully, saree draped elegantly over one shoulder`,
+    // CLOTHING — round/scoop neck for jewellery visibility without deep décolletage
+    `wearing a round-neck scoop-neck Indian saree blouse in rich navy dark-blue with gold zari border, full neck and collarbone clearly visible to showcase the jewellery beautifully, saree draped elegantly over one shoulder`,
     // SCENE — luxury formula: minimal subject + premium environment + soft lighting
     `professional jewellery photography, clean white studio background, soft diffused lighting, emphasis on texture and reflections`,
     `hyperrealistic, Phase One IQ4 camera quality, 9:16 portrait`,
@@ -196,8 +196,8 @@ export async function generateAngleShots(
         // JEWELLERY LOCK — second reference image enforces this at the pixel level
         `wearing the EXACT same jewellery as the product reference image — every gemstone shape cut colour quantity and arrangement preserved identically`,
         `DO NOT add earrings rings bangles or any accessory not visible in reference. DO NOT simplify or change any jewellery element.`,
-        // CLOTHING — same as Step 1, deep V-neck for jewellery visibility
-        `deep V-neck navy dark-blue saree blouse with gold zari border, bare shoulders, neck and décolletage fully visible, saree draped over one shoulder`,
+        // CLOTHING — same as Step 1, round/scoop neck for jewellery visibility
+        `round-neck scoop-neck navy dark-blue saree blouse with gold zari border, full neck and collarbone visible, saree draped over one shoulder`,
         // Camera angle — only thing that changes per shot
         composition,
         // Quality — luxury formula: texture focus + elegant camera angle
