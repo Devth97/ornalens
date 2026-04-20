@@ -42,7 +42,12 @@ export default function HomeScreen() {
       const data = await listJobs()
       setJobs(data ?? [])
     } catch (e) {
-      console.error('Failed to load jobs:', e)
+      const msg = e instanceof Error ? e.message : ''
+      // Swallow the initial mount race — Clerk token setter may not be wired yet.
+      // The 8s polling interval will succeed once auth is fully ready.
+      if (!msg.includes('Clerk not ready') && !msg.includes('Not authenticated')) {
+        console.error('Failed to load jobs:', e)
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)

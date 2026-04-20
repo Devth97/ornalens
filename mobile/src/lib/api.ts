@@ -5,7 +5,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'
 // a fresh JWT in Expo. We store the function reference here and call it per-request.
 let _getToken: (() => Promise<string | null>) | null = null
 
-export function setClerkTokenGetter(fn: () => Promise<string | null>) {
+export function setClerkTokenGetter(fn: (() => Promise<string | null>) | null) {
   _getToken = fn
 }
 

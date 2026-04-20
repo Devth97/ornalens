@@ -17,23 +17,26 @@ const Stack = createNativeStackNavigator()
 function AppNavigator() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
 
-  // Wire Clerk's getToken into the API module so every authenticated
-  // fetch call gets a valid JWT without touching SecureStore directly.
+  // Set token getter SYNCHRONOUSLY during render — not in useEffect.
+  // useEffect fires after all child effects, so HomeScreen's loadJobs()
+  // would always run before the token getter was set, causing "Clerk not ready".
+  // Setting it here ensures it's available before any child effect fires.
+  if (isSignedIn) {
+    setClerkTokenGetter(async () => {
+      try {
+        const token = await getToken()
+        return token
+      } catch (e) {
+        console.error('[Auth] getToken failed:', e)
+        return null
+      }
+    })
+  }
+
+  // Clear token getter on sign-out
   useEffect(() => {
-    if (isSignedIn) {
-      // Wrap to ensure we always call with no args and get a plain string token
-      setClerkTokenGetter(async () => {
-        try {
-          const token = await getToken()
-          console.log('[Auth] Token obtained:', token ? `${token.slice(0, 20)}...` : 'null')
-          return token
-        } catch (e) {
-          console.error('[Auth] getToken failed:', e)
-          return null
-        }
-      })
-    }
-  }, [isSignedIn, getToken])
+    if (!isSignedIn) setClerkTokenGetter(() => Promise.resolve(null))
+  }, [isSignedIn])
 
   if (!isLoaded) {
     return (
