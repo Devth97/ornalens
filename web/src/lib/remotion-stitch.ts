@@ -1,5 +1,5 @@
 // Video stitching with crossfade transitions via ffmpeg xfade filter
-// Re-encoding with libx264 fast preset is reliable on Vercel for short clips (2-5×5s)
+// Re-encoding with libx264 fast preset is reliable on Vercel for short clips (5×5s)
 // xfade requires decoded input — clips must be same resolution and fps (Seedance guarantees this)
 
 import { execFile } from 'child_process'

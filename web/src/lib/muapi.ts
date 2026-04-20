@@ -17,11 +17,6 @@ const CHARACTER_ANCHOR = [
   'fine baby hair strands visible at hairline and temples',
 ].join(', ')
 
-// Short face lock — used in Step 2 (Flux) only.
-// Skin/texture details are already baked into the Step 1 output image.
-// Kept short deliberately to stay within MuAPI prompt length limits.
-const FLUX_FACE_LOCK = 'same model as reference image, identical face skin tone makeup and sleek straight dark hair, clean white studio background, no earrings no rings no extra accessories'
-
 // ─── Outfit options ───────────────────────────────────────────────────────
 // Picked once per job in runPipeline and passed to both Step 1 + Step 2.
 // All options: round/scoop neck to keep full neck + collarbone visible for jewellery.
@@ -42,29 +37,29 @@ export function pickOutfit(): string {
 }
 
 // ─── Angle shot definitions ───────────────────────────────────────────────
-// Each angle changes ONLY camera/composition — model, clothing, jewellery unchanged.
-// Luxury Brand Formula: Minimal Subject + Premium Environment + Soft Lighting +
-//   Texture Focus + Elegant Camera Angle (from AI Video Creation Guide)
+// 5 genuinely distinct shots — same as a real multi-camera jewellery photoshoot.
+// Each targets a different editorial use case: full look, editorial turn,
+// beauty close-up, architectural profile, and jewellery macro detail.
 const SHOT_ANGLES = [
   {
-    angle: 'front',
-    composition: 'full portrait, model facing camera directly, jewellery centred and fully visible at neckline, clean white studio background, soft diffused front lighting, professional luxury jewellery campaign, 85mm lens, f/2.0, sharp on jewellery',
+    angle: 'full_front',
+    composition: 'full portrait from head to waist, model facing camera directly, standing with elegant posture, jewellery centred and fully visible at neckline, both hands relaxed at sides, clean white studio background, soft diffused front lighting, 50mm lens, sharp on jewellery and face, professional luxury jewellery campaign',
   },
   {
-    angle: 'three_quarter',
-    composition: 'three-quarter portrait, model at 45-degree angle to camera, jewellery visible against neckline, elegant posture, saree draped over one shoulder, clean white studio background, soft studio lighting, 85mm lens, jewellery in sharp focus',
+    angle: 'over_shoulder',
+    composition: 'three-quarter portrait, model turned 45 degrees away from camera with head turned back over her shoulder looking into lens, jewellery visible at neckline from this angle, saree draped elegantly over turned shoulder, clean white studio background, soft studio lighting, 85mm lens, f/2.0, editorial luxury feel',
   },
   {
-    angle: 'close_up',
-    composition: 'medium close-up portrait framed from shoulders to chin, both shoulders visible with saree draped over one shoulder, jewellery prominently displayed at neckline, clean white studio background, soft studio lighting, 85mm lens, f/2.0, ultra-sharp on jewellery',
+    angle: 'face_closeup',
+    composition: 'extreme close-up portrait from forehead to just below chin, face fills the frame, jewellery barely visible at the very bottom edge of frame, sharp focus on face eyes and skin texture, clean white studio background, soft diffused beauty lighting, 135mm lens, f/1.8, high-end editorial beauty shot',
   },
   {
-    angle: 'side',
-    composition: 'clean side profile portrait, model facing left, saree draped over shoulder, jewellery visible at neckline catching soft light, clean white studio background, no windows, 85mm lens, shallow depth of field, jewellery in sharp focus',
+    angle: 'side_profile',
+    composition: 'clean full side profile, model facing left, entire profile visible from ear to shoulder, jewellery visible in full silhouette profile along the neckline, saree draping over shoulder visible, clean white studio background, soft side lighting catching jewellery facets and gemstone edges, 85mm lens, f/2.0, architectural jewellery shot',
   },
   {
-    angle: 'overhead_tilt',
-    composition: 'slightly elevated camera angle looking down at model, model gazes slightly upward, saree draped over one shoulder, jewellery fully visible at neckline, clean white studio background, soft ambient studio lighting, 50mm lens, shallow depth of field',
+    angle: 'jewellery_detail',
+    composition: 'macro detail shot framed from chin to mid-chest, jewellery fills the frame and is the primary subject, model chin and lips visible at top of frame, collarbone and décolletage visible below, every gemstone chain link and metal element in ultra-sharp focus, clean white studio background, soft diffused studio lighting, 100mm macro lens, f/2.8, jewellery catalogue shot',
   },
 ]
 
@@ -192,49 +187,54 @@ export async function placeJewelleryOnModel(
     resolution: '2k',   // valid — upgrades output quality
   })
 
-  return pollResult(requestId)
+  return pollResult(requestId, 600_000)
 }
 
-// ─── Step 2: Multi-angle shots via Flux Kontext Pro ────────────────────────
+// ─── Step 2: Multi-angle shots via NanoBanana 2 (dual-reference) ─────────────
 /**
- * Single reference = NanoBanana output (already has model + jewellery together).
- * Dual-reference (two images in images_list) caused all 5 jobs to fail — Flux
- * Kontext Pro I2I only accepts one image. Jewellery design is locked through the
- * NanoBanana output + strong prompt constraints instead.
+ * Dual-reference: NanoBanana receives BOTH the Step 1 model image AND the original
+ * jewellery image simultaneously. This anchors both the model identity and the exact
+ * jewellery design, preventing the drift and hallucinated accessories that Flux (single-ref) had.
  */
 export async function generateAngleShots(
   modelImageUrl: string,
   _description: string,
-  _jewelleryImageUrl?: string,  // kept for API compat, not used (single-ref only)
+  jewelleryImageUrl?: string,
   outfit?: string,
 ): Promise<Array<{ angle: string; prompt: string; image_url: string }>> {
   const outfitDesc = outfit ?? OUTFIT_OPTIONS[0]
+
+  // Build images_list: always include model image; add jewellery ref if available for dual-anchor
+  const imagesList = jewelleryImageUrl
+    ? [modelImageUrl, jewelleryImageUrl]
+    : [modelImageUrl]
 
   // Promise.allSettled — if one angle fails we keep the rest and don't waste credits
   const settled = await Promise.allSettled(
     SHOT_ANGLES.map(async ({ angle, composition }) => {
       const prompt = [
-        // Short face lock — skin details already baked into the Step 1 reference image
-        FLUX_FACE_LOCK,
-        // JEWELLERY LOCK
-        'exact same jewellery as reference, every gemstone preserved, DO NOT add earrings or any unlisted accessory',
+        // Model identity — baked into reference image, keep prompt short
+        'same model as reference image, identical face skin tone makeup and sleek straight dark hair',
+        // JEWELLERY LOCK — reproduced from both reference images
+        'exact same jewellery as shown in reference images, every gemstone colour shape and arrangement preserved, DO NOT add earrings rings bangles or any accessory not in the reference',
         // CLOTHING
-        `wearing ${outfitDesc}`,
+        `wearing ${outfitDesc}, full neck and collarbone visible`,
         // Camera angle
         composition,
         // Quality
-        'professional luxury jewellery photography, hyperrealistic',
+        'clean white studio background, professional luxury jewellery photography, hyperrealistic',
       ].join(', ')
 
-      // flux-kontext-pro-i2i: valid params per MuAPI schema — prompt, images_list, aspect_ratio ONLY
-      // `strength` is NOT a valid parameter for this endpoint — causes 422 rejection
-      const requestId = await submitJob('flux-kontext-pro-i2i', {
+      // nano-banana-2-edit: supports images_list with multiple images (dual reference).
+      // Valid params: prompt, images_list, aspect_ratio, resolution
+      const requestId = await submitJob('nano-banana-2-edit', {
         prompt,
-        images_list: [modelImageUrl],
+        images_list: imagesList,
         aspect_ratio: '9:16',
+        resolution: '2k',
       })
 
-      const imageUrl = await pollResult(requestId)
+      const imageUrl = await pollResult(requestId, 600_000)
       return { angle, prompt, image_url: imageUrl }
     })
   )
@@ -278,7 +278,7 @@ export async function generateVideoFromShot(
       image_url: imageUrl,
       aspect_ratio: '9:16',
       duration: 5,
-      quality: 'basic',
+      quality: 'pro',
     })
     console.log(`[muapi] Using seedance-v1.5-pro-i2v for angle: ${angle}`)
   } catch (e) {
@@ -290,7 +290,7 @@ export async function generateVideoFromShot(
         image_url: imageUrl,
         aspect_ratio: '9:16',
         duration: 5,
-        quality: 'basic',
+        // quality omitted — seedance-pro-i2v-fast may not support this param
       })
     } else {
       throw e
@@ -300,53 +300,31 @@ export async function generateVideoFromShot(
   return pollResult(requestId, 600_000)
 }
 
-// Jewellery consistency lock — prepended to every video prompt.
-// Seedance drifts from the reference image over time; this constraint anchors
-// the design in every frame, preventing mid-video hallucination.
-const VIDEO_JEWELLERY_LOCK =
-  'jewellery design is IDENTICAL in every single frame of the video — ' +
-  'same gemstone colours, shapes, arrangement, and metal finish throughout, ' +
-  'no changes to jewellery design at any point, jewellery remains exactly as shown in the reference image'
-
-// Motion Prompt Formula: Camera Movement + Subject Motion + Environmental Effects + Speed + Mood
-// Jewellery lock is prepended to every prompt to prevent mid-video design drift.
+// Motion-only prompts — the reference IMAGE handles all visuals.
+// DO NOT describe lighting effects, sparkle, flares, or gem appearance in video prompts.
+// Telling the model to "generate sparkle on gemstones" causes it to fabricate new gem designs.
+// Prompts describe MOVEMENT only: how the model moves, how the camera moves, pace.
 function buildVideoMotionPrompt(angle: string): string {
   const motionMap: Record<string, string> = {
-    front:
-      'model walks slowly toward camera in a minimal luxury setting, hair moves naturally with one side tucked revealing jewellery, ' +
-      'golden-hour sunlight creates soft glow and sparkle on gemstones, jewellery stays highlighted throughout, ' +
-      '50mm lens, shallow depth of field, focus tracks jewellery as she moves, ' +
-      '4K ultra-realistic cinematic video, 60fps slow motion, elegant luxury jewellery campaign feel',
+    full_front:
+      'model walks slowly toward camera, subtle confident stride, slight natural sway, hair moves gently, slow motion',
 
-    three_quarter:
-      'model turns gently over her shoulder toward camera, hair tucked behind ear revealing jewellery, subtle elegant pace, ' +
-      'controlled studio lighting creates soft highlights and reflections on precious stones, ' +
-      'focus tracks jewellery as she moves, dark muted background, cinematic contrast, ' +
-      '85mm lens, 4K slow motion, jewellery in sharp focus throughout',
+    over_shoulder:
+      'model slowly turns head back over her shoulder toward camera, graceful unhurried movement, hair shifts naturally',
 
-    close_up:
-      'model subtly shifts shoulders causing the saree drape to settle gracefully, jewellery catches studio light and gemstones sparkle brilliantly, ' +
-      'light flares cascade across gemstone surface illuminating each facet, shoulders and saree drape remain visible throughout, ' +
-      '85mm lens, ultra-detailed 4K video, shallow depth of field, jewellery in perfect sharp focus, soft blurred background',
+    face_closeup:
+      'model blinks softly, very subtle smile, slight natural head tilt, calm breathing, minimal movement',
 
-    side:
-      'model in clean side profile slowly turns head by a few degrees causing jewellery to catch light and sparkle, ' +
-      'soft natural window light falls across face, diamonds and gemstones throw brilliant light flares with each subtle movement, ' +
-      '85mm lens, shallow depth of field, 4K ultra-realistic cinematic video, 60fps slow motion, ' +
-      'neutral background, jewellery remains in sharp focus throughout',
+    side_profile:
+      'model slowly turns head a few degrees, subtle chin lift, elegant stillness with very slight natural sway',
 
-    overhead_tilt:
-      'model seated gracefully, gently adjusts hair behind ear naturally revealing jewellery, ' +
-      'warm ambient lighting enhances gold tones and gemstone colour, slow controlled elegant movement, ' +
-      'soft shadows, premium lifestyle aesthetic, ' +
-      '50mm lens, 4K cinematic framing, shallow depth of field, focus remains on jewellery',
+    jewellery_detail:
+      'model breathes naturally causing very slight chest movement, shoulders settle gently, near stillness',
   }
 
-  const basePrompt = motionMap[angle] ??
-    'model moves gracefully, jewellery catches studio light brilliantly, gemstones sparkle with each subtle movement, ' +
-    'focus tracks jewellery throughout, 4K slow motion, cinematic luxury jewellery campaign'
+  const basePrompt = motionMap[angle] ?? 'model moves gracefully with subtle natural motion, slow elegant pace'
 
-  return `${VIDEO_JEWELLERY_LOCK}. ${basePrompt}`
+  return basePrompt
 }
 
 /**

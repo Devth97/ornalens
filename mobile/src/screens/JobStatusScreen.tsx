@@ -26,9 +26,11 @@ function getStepIndex(status: string): number {
 // ─── Download helper ────────────────────────────────────────────────────────
 async function downloadToGallery(url: string, filename: string, isVideo = false): Promise<void> {
   // Request permission
-  const { status } = await MediaLibrary.requestPermissionsAsync()
+  // writeOnly: true — requests "Add Photos Only" on iOS (less invasive, higher grant rate).
+  // saveToLibraryAsync only needs write access, not full library read.
+  const { status } = await MediaLibrary.requestPermissionsAsync(true)
   if (status !== 'granted') {
-    Alert.alert('Permission needed', 'Allow storage access to save files to your gallery.')
+    Alert.alert('Permission needed', 'Allow photo access to save files to your gallery.')
     return
   }
 
@@ -51,17 +53,10 @@ async function downloadToGallery(url: string, filename: string, isVideo = false)
     }
     console.log('[Download] File size:', (fileInfo as any).size)
 
-    const asset = await MediaLibrary.createAssetAsync(result.uri)
-    console.log('[Download] Asset created:', asset.id)
+    await MediaLibrary.saveToLibraryAsync(result.uri)
+    console.log('[Download] Saved to library')
 
-    const album = await MediaLibrary.getAlbumAsync('Ornalens')
-    if (album === null) {
-      await MediaLibrary.createAlbumAsync('Ornalens', asset, true)
-    } else {
-      await MediaLibrary.addAssetsToAlbumAsync([asset], album, true)
-    }
-
-    Alert.alert('✅ Saved!', `Saved to your gallery in the "Ornalens" album.`)
+    Alert.alert('✅ Saved!', 'Saved to your camera roll.')
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[Download] Failed:', msg)
