@@ -1,6 +1,6 @@
 export interface AngleShot {
   angle: string
-  prompt: string
+  prompt?: string
   image_url: string | null
   video_url: string | null
 }

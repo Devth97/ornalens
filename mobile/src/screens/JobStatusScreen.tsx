@@ -4,7 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Linking, Share, Alert
 } from 'react-native'
 import { useRoute } from '@react-navigation/native'
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import * as MediaLibrary from 'expo-media-library'
 import { getJob } from '../lib/api'
 import type { Job, AngleShot } from './types'

@@ -201,7 +201,7 @@ export async function generateAngleShots(
   _description: string,
   jewelleryImageUrl?: string,
   outfit?: string,
-): Promise<Array<{ angle: string; prompt: string; image_url: string }>> {
+): Promise<Array<{ angle: string; image_url: string }>> {
   const outfitDesc = outfit ?? OUTFIT_OPTIONS[0]
 
   // Build images_list: always include model image; add jewellery ref if available for dual-anchor
@@ -226,16 +226,16 @@ export async function generateAngleShots(
       ].join(', ')
 
       // nano-banana-2-edit: supports images_list with multiple images (dual reference).
-      // Valid params: prompt, images_list, aspect_ratio, resolution
+      // resolution omitted for Step 2 — default is faster, keeps 5 parallel jobs within 300s Vercel limit.
+      // resolution: '2k' is kept only for Step 1 (model portrait) where max quality matters most.
       const requestId = await submitJob('nano-banana-2-edit', {
         prompt,
         images_list: imagesList,
         aspect_ratio: '9:16',
-        resolution: '2k',
       })
 
       const imageUrl = await pollResult(requestId, 600_000)
-      return { angle, prompt, image_url: imageUrl }
+      return { angle, image_url: imageUrl }
     })
   )
 
@@ -245,7 +245,7 @@ export async function generateAngleShots(
       console.error(`[muapi] Angle shot ${SHOT_ANGLES[i].angle} failed: ${r.reason}`)
       return null
     })
-    .filter((r): r is { angle: string; prompt: string; image_url: string } => r !== null)
+    .filter((r): r is { angle: string; image_url: string } => r !== null)
 
   if (successes.length === 0) {
     throw new Error('All angle shots failed — no images to proceed with')
@@ -278,7 +278,7 @@ export async function generateVideoFromShot(
       image_url: imageUrl,
       aspect_ratio: '9:16',
       duration: 5,
-      quality: 'pro',
+      quality: 'basic',
     })
     console.log(`[muapi] Using seedance-v1.5-pro-i2v for angle: ${angle}`)
   } catch (e) {

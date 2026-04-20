@@ -99,7 +99,7 @@ async function runPipeline(
     const shots = await generateAngleShots(modelImageUrl, description, jewelleryImageUrl, outfit)
     await updateJob(jobId, {
       status: 'shots_done',
-      angle_shots: shots.map(s => ({ ...s, video_url: null })),
+      angle_shots: shots.map(s => ({ angle: s.angle, image_url: s.image_url, video_url: null })),
     })
     console.log(`[pipeline:${jobId}] Generated ${shots.length} shots`)
 
