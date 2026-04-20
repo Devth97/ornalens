@@ -101,6 +101,22 @@ export async function getJob(jobId: string) {
   return data.job
 }
 
+export async function retryJob(jobId: string): Promise<void> {
+  const authHeaders = await getAuthHeader()
+
+  const res = await fetch(`${API_URL}/api/jobs/${jobId}/retry`, {
+    method: 'POST',
+    headers: authHeaders,
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    let err
+    try { err = JSON.parse(text) } catch { err = { error: text || `HTTP ${res.status}` } }
+    throw new Error(err.error ?? `Retry failed (${res.status})`)
+  }
+}
+
 export async function listJobs() {
   const authHeaders = await getAuthHeader()
 

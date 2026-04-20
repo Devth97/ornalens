@@ -6,7 +6,7 @@ import {
 import { useRoute } from '@react-navigation/native'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as MediaLibrary from 'expo-media-library'
-import { getJob } from '../lib/api'
+import { getJob, retryJob } from '../lib/api'
 import type { Job, AngleShot } from './types'
 
 const PIPELINE_STEPS = [
@@ -113,6 +113,19 @@ export default function JobStatusScreen() {
     return () => clearInterval(interval)
   }, [loadJob, job?.status])
 
+  const [retrying, setRetrying] = useState(false)
+  const handleRetry = async () => {
+    setRetrying(true)
+    try {
+      await retryJob(jobId)
+      await loadJob()
+    } catch (e) {
+      Alert.alert('Retry failed', e instanceof Error ? e.message : String(e))
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   const shareVideo = async () => {
     if (!job?.final_video_url) return
     try {
@@ -181,6 +194,14 @@ export default function JobStatusScreen() {
           <Text style={styles.errorMsg}>{job.error_message ?? 'Unknown error'}</Text>
           {(job.model_image_url || job.angle_shots?.length > 0) && (
             <Text style={styles.errorHint}>↓ Scroll down — your images and videos are still available below</Text>
+          )}
+          {job.model_image_url && (
+            <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} disabled={retrying}>
+              {retrying
+                ? <ActivityIndicator size="small" color="#0a0a0a" />
+                : <Text style={styles.retryBtnText}>↺  Resume Pipeline</Text>
+              }
+            </TouchableOpacity>
           )}
         </View>
       )}
@@ -377,6 +398,8 @@ const styles = StyleSheet.create({
 
   processingHint: { color: '#444', fontSize: 12, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20, marginTop: 8 },
   errorHint: { color: '#D4AF37', fontSize: 12, marginTop: 8, fontWeight: '600' },
+  retryBtn: { backgroundColor: '#D4AF37', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
+  retryBtnText: { color: '#0a0a0a', fontWeight: '800', fontSize: 14 },
 
   // Individual clip rows
   clipRow: { backgroundColor: '#141414', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#222' },
