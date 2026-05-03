@@ -1,17 +1,18 @@
-// POST /api/jobs — create job + kick off full pipeline async
+// POST /api/jobs — create job + run Steps 1+2, then fire Step 3 as a separate invocation
 // GET  /api/jobs — list jobs for authenticated user
 
-// Pipeline: NanoBanana (Step 1) + 5×NanoBanana dual-ref parallel (Step 2) + 5×Seedance parallel (Step 3) + ffmpeg xfade stitch (Step 4)
-// Total runtime: 8–15 min. Vercel Hobby maxDuration=300s covers Steps 1+2 and ~3 Seedance clips.
-// Stitch fallback: if stitch fails or times out, first video clip is used as final video.
+// Chain-fire architecture — each step is a separate Vercel serverless invocation (own 300s budget):
+//   POST /api/jobs          → Steps 1+2 (NanoBanana portrait + 5× angle shots) → fires /videos
+//   POST /api/jobs/[id]/videos → Step 3 (5× Seedance parallel)                 → fires /stitch
+//   POST /api/jobs/[id]/stitch → Step 4 (FFmpeg xfade + Supabase upload)
 export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { getAuthUserId } from '@/lib/get-auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { placeJewelleryOnModel, generateAngleShots, generateAllVideoClips, pickOutfit } from '@/lib/muapi'
-import { stitchVideosWithTransitions, uploadFinalVideo } from '@/lib/remotion-stitch'
+import { placeJewelleryOnModel, generateAngleShots, pickOutfit } from '@/lib/muapi'
+import { fireStep } from '@/lib/internal'
 
 export async function GET(req: NextRequest) {
   const userId = await getAuthUserId(req)
@@ -92,6 +93,11 @@ async function runPipeline(
     console.log(`[pipeline:${jobId}] Step 1: Placing jewellery on model`)
     const modelImageUrl = await placeJewelleryOnModel(jewelleryImageUrl, description, modelStyle, outfit)
     await updateJob(jobId, { status: 'model_done', model_image_url: modelImageUrl })
+    // Persist outfit separately so retry can reuse it instead of re-rolling a mismatched one.
+    // Best-effort: silently ignored if `outfit TEXT` column hasn't been added to jobs table yet.
+    await supabaseAdmin.from('jobs').update({ outfit }).eq('id', jobId).then(
+      ({ error }) => { if (error) console.warn(`[pipeline:${jobId}] outfit save skipped: ${error.message}`) }
+    )
     console.log(`[pipeline:${jobId}] Model image: ${modelImageUrl}`)
 
     // ── Step 2: Multi-angle shots ──────────────────────────────────────
@@ -103,40 +109,9 @@ async function runPipeline(
     })
     console.log(`[pipeline:${jobId}] Generated ${shots.length} shots`)
 
-    // ── Step 3: MuAPI Seedance Pro I2V Fast — video per shot ──────────────
-    console.log(`[pipeline:${jobId}] Step 3: Generating video clips via MuAPI (Seedance v1.5 Pro I2V)`)
-    const videoClips = await generateAllVideoClips(shots, description, modelImageUrl)
-
-    // Match by angle name, not index — videoClips may be shorter than shots if some failed
-    const shotsWithVideos = shots.map(shot => ({
-      ...shot,
-      video_url: videoClips.find(v => v.angle === shot.angle)?.video_url ?? null,
-    }))
-    await updateJob(jobId, {
-      status: 'videos_done',
-      angle_shots: shotsWithVideos,
-    })
-
-    // ── Step 4: Stitch clips ────────────────────────────────────────────
-    console.log(`[pipeline:${jobId}] Step 4: Stitching video clips`)
-    await updateJob(jobId, { status: 'stitching' })
-
-    let finalVideoUrl: string | null = null
-    try {
-      const videoUrls = videoClips.map(v => v.video_url)
-      const finalVideoLocalPath = await stitchVideosWithTransitions(videoUrls, jobId)
-      finalVideoUrl = await uploadFinalVideo(finalVideoLocalPath, jobId, supabaseAdmin as any)
-      console.log(`[pipeline:${jobId}] ✅ Stitch complete: ${finalVideoUrl}`)
-    } catch (stitchErr) {
-      // Stitch failed — still mark completed so user can see images + individual clips
-      // Fallback: use the first video clip as the "final" video
-      const msg = stitchErr instanceof Error ? stitchErr.message : String(stitchErr)
-      console.error(`[pipeline:${jobId}] ⚠️ Stitch failed (non-fatal): ${msg}`)
-      finalVideoUrl = videoClips[0]?.video_url ?? null
-    }
-
-    await updateJob(jobId, { status: 'completed', final_video_url: finalVideoUrl })
-    console.log(`[pipeline:${jobId}] ✅ Complete: ${finalVideoUrl}`)
+    // ── Steps 3+4 run in their own Vercel invocations (separate 300s budgets) ──
+    console.log(`[pipeline:${jobId}] Firing Step 3 (videos) as separate invocation`)
+    await fireStep(jobId, 'videos')
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

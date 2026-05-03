@@ -45,3 +45,4 @@ ornallens-gcp-key*
 *.json.json
 
 .vercel
+.env*.local

@@ -12,12 +12,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 const execFileAsync = promisify(execFile)
 
 function getFfmpegPath(): string {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('@ffmpeg-installer/ffmpeg').path
-  } catch {
-    return 'ffmpeg'
-  }
+  // ffmpeg-static is in serverExternalPackages so webpack won't mangle require()
+  // Returns correct absolute path on both Windows dev and Vercel Linux
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('ffmpeg-static') as string
 }
 
 async function downloadVideo(url: string, destPath: string): Promise<void> {
@@ -27,15 +25,31 @@ async function downloadVideo(url: string, destPath: string): Promise<void> {
   await fs.writeFile(destPath, Buffer.from(buffer))
 }
 
-const CLIP_DURATION_S = 5    // Seedance output duration (matches duration: 5 in muapi.ts)
 const FADE_DURATION_S = 0.5  // crossfade overlap between clips
+
+/**
+ * Probe the duration of a local video file using FFmpeg stderr output.
+ * FFmpeg always exits non-zero when given only -i, so we catch the error and read stderr.
+ */
+async function getClipDuration(ffmpeg: string, clipPath: string): Promise<number> {
+  const result = await execFileAsync(ffmpeg, ['-i', clipPath]).catch((e: unknown) => e)
+  const stderr = (result as { stderr?: string }).stderr ?? ''
+  const match = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/)
+  if (match) {
+    const duration = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseFloat(match[3])
+    console.log(`[stitch] Probed clip duration: ${duration}s`)
+    return duration
+  }
+  console.warn(`[stitch] Could not probe duration, falling back to 5s`)
+  return 5
+}
 
 /**
  * Stitch clips with smooth crossfade transitions using ffmpeg xfade filter.
  *
  * xfade offset formula for N clips chained sequentially:
- *   transition_i_offset = (i + 1) * (CLIP_DURATION_S - FADE_DURATION_S)
- * e.g. 2 clips × 5s with 0.5s fade → offset = 4.5s, output = 9.5s total
+ *   offset[i] = i * (clipDuration - FADE_DURATION_S)
+ * Duration is probed at runtime so dev-mode test clips and production clips both work.
  */
 export async function stitchVideosWithTransitions(
   videoUrls: string[],
@@ -59,6 +73,9 @@ export async function stitchVideosWithTransitions(
 
   const finalPath = path.join(tmpDir, 'final.mp4')
   const ffmpeg = getFfmpegPath()
+
+  // Probe actual clip duration so xfade offsets are correct regardless of clip length
+  const clipDuration = await getClipDuration(ffmpeg, clipPaths[0])
 
   // Build xfade filter chain for N clips
   // Each clip is a separate -i input; xfade is chained progressively
@@ -84,7 +101,7 @@ export async function stitchVideosWithTransitions(
   // Step 2 — chain xfade transitions on normalized streams
   let prevLabel = normalizedLabels[0]
   for (let i = 1; i < clipPaths.length; i++) {
-    const offset = i * (CLIP_DURATION_S - FADE_DURATION_S)
+    const offset = i * (clipDuration - FADE_DURATION_S)
     const outLabel = i === clipPaths.length - 1 ? '[outv]' : `[x${i}]`
     filterParts.push(
       `${prevLabel}${normalizedLabels[i]}xfade=transition=fade:duration=${FADE_DURATION_S}:offset=${offset}${outLabel}`

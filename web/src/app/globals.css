@@ -45,3 +45,12 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: #b8962e;
 }
+
+/* Hide scrollbar for horizontal scroll areas */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

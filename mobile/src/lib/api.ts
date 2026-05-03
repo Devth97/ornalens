@@ -117,6 +117,34 @@ export async function retryJob(jobId: string): Promise<void> {
   }
 }
 
+export async function generatePhotoshoot(params: {
+  jewellery_image_url: string
+  template_id: string
+  prompt: string
+  additional_notes?: string
+  aspect_ratio: string
+  quality: string
+}): Promise<{ job_id: string; image_url: string }> {
+  const authHeaders = await getAuthHeader()
+
+  const res = await fetch(`${API_URL}/api/photoshoot`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    let err
+    try { err = JSON.parse(text) } catch { err = { error: text || `HTTP ${res.status}` } }
+    console.error(`[API] POST /api/photoshoot failed: ${res.status}`, text.slice(0, 200))
+    throw new Error(err.error ?? `Failed to generate photoshoot (${res.status})`)
+  }
+
+  const data = await res.json()
+  return { job_id: data.job_id, image_url: data.image_url }
+}
+
 export async function listJobs() {
   const authHeaders = await getAuthHeader()
 
@@ -124,10 +152,43 @@ export async function listJobs() {
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    console.error(`[API] GET /api/jobs failed: ${res.status}`, text.slice(0, 200))
-    throw new Error(`Failed to fetch jobs (${res.status})`)
+    throw new Error(`Failed to fetch jobs (${res.status}): ${text.slice(0, 80)}`)
   }
 
+  return res.json().then((d: any) => d.jobs)
+}
+
+export async function getTokenBalance(): Promise<{
+  plan: string
+  tokens_granted: number
+  tokens_used: number
+  tokens_balance: number
+}> {
+  const authHeaders = await getAuthHeader()
+  const res = await fetch(`${API_URL}/api/tokens`, { headers: authHeaders })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to fetch tokens (${res.status}): ${text.slice(0, 80)}`)
+  }
+  return res.json()
+}
+
+export async function listFavorites(): Promise<string[]> {
+  const authHeaders = await getAuthHeader()
+  const res = await fetch(`${API_URL}/api/favorites`, { headers: authHeaders })
+  if (!res.ok) return []
   const data = await res.json()
-  return data.jobs
+  return data.favorites ?? []
+}
+
+export async function toggleFavorite(templateId: string): Promise<'added' | 'removed'> {
+  const authHeaders = await getAuthHeader()
+  const res = await fetch(`${API_URL}/api/favorites`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template_id: templateId }),
+  })
+  if (!res.ok) throw new Error(`Failed to toggle favorite (${res.status})`)
+  const data = await res.json()
+  return data.action
 }

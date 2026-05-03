@@ -1,16 +1,17 @@
 // POST /api/jobs/[id]/retry — resume pipeline from last completed step
-// Reads saved job state and continues from the earliest failed point:
-//   model_done  (angle shots never saved) → re-run Steps 2 + 3 + 4
-//   shots_done  (videos never generated) → run Steps 3 + 4
-//   videos_done (stitch never ran)       → run Step 4
+//
+// Resumes from earliest failure point using chain-fire (each step = own 300s invocation):
+//   has videos saved   → fires /stitch directly
+//   has shots saved    → fires /videos  (which then fires /stitch)
+//   no shots saved     → re-runs Step 2 inline, then fires /videos
 export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { getAuthUserId } from '@/lib/get-auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { generateAngleShots, generateAllVideoClips, pickOutfit } from '@/lib/muapi'
-import { stitchVideosWithTransitions, uploadFinalVideo } from '@/lib/remotion-stitch'
+import { generateAngleShots, pickOutfit } from '@/lib/muapi'
+import { fireStep } from '@/lib/internal'
 
 export async function POST(
   req: NextRequest,
@@ -38,6 +39,16 @@ export async function POST(
     return NextResponse.json({ error: 'Job already completed' }, { status: 400 })
   }
 
+  // Reject if pipeline is still actively running — prevents duplicate Seedance charges
+  // and racy writes to angle_shots from two concurrent invocations.
+  const activeStatuses = ['processing', 'model_done', 'shots_done', 'videos_done', 'stitching']
+  if (activeStatuses.includes(job.status)) {
+    return NextResponse.json(
+      { error: 'Job is still running — wait for it to complete or fail before resuming' },
+      { status: 409 }
+    )
+  }
+
   const hasAngleShots = job.angle_shots?.some((s: { image_url: string | null }) => s.image_url)
   const hasVideos     = job.angle_shots?.some((s: { video_url: string | null }) => s.video_url)
   const resumingFrom  = hasVideos ? 'stitch' : hasAngleShots ? 'videos' : 'angle_shots'
@@ -47,9 +58,16 @@ export async function POST(
     .update({ status: 'processing', error_message: null })
     .eq('id', jobId)
 
-  waitUntil(
-    resumePipeline(job).catch(err => console.error(`[retry] Job ${jobId} crashed:`, err))
-  )
+  if (hasVideos) {
+    // Clips already exist — just re-stitch
+    waitUntil(fireStep(jobId, 'stitch'))
+  } else if (hasAngleShots) {
+    // Shots exist, videos don't — start from Step 3
+    waitUntil(fireStep(jobId, 'videos'))
+  } else {
+    // No shots — re-run Step 2 inline (fits in 300s), then fire Step 3
+    waitUntil(rerunAngleShots(job))
+  }
 
   return NextResponse.json({ job_id: jobId, status: 'processing', resuming_from: resumingFrom })
 }
@@ -60,74 +78,24 @@ async function updateJob(jobId: string, updates: Record<string, unknown>) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function resumePipeline(job: any) {
-  const { id: jobId, jewellery_description: description, model_image_url: modelImageUrl,
-          jewellery_image_url: jewelleryImageUrl, model_style: modelStyle } = job
-
-  const hasAngleShots = job.angle_shots?.some((s: { image_url: string | null }) => s.image_url)
-  const hasVideos     = job.angle_shots?.some((s: { video_url: string | null }) => s.video_url)
-
+async function rerunAngleShots(job: any) {
+  const { id: jobId, jewellery_description: description,
+          model_image_url: modelImageUrl, jewellery_image_url: jewelleryImageUrl } = job
   try {
-    let shots: Array<{ angle: string; image_url: string }>
-    let videoClips: Array<{ angle: string; video_url: string }>
-
-    // ── Step 2: angle shots (only if not already saved) ───────────────────
-    if (!hasAngleShots) {
-      console.log(`[retry:${jobId}] Step 2: generating angle shots`)
-      const outfit = pickOutfit()
-      const newShots = await generateAngleShots(modelImageUrl, description, jewelleryImageUrl, outfit)
-      await updateJob(jobId, {
-        status: 'shots_done',
-        angle_shots: newShots.map(s => ({ angle: s.angle, image_url: s.image_url, video_url: null })),
-      })
-      shots = newShots
-      console.log(`[retry:${jobId}] ${shots.length} angle shots done`)
-    } else {
-      shots = job.angle_shots
-        .filter((s: { image_url: string | null }) => s.image_url)
-        .map((s: { angle: string; image_url: string }) => ({ angle: s.angle, image_url: s.image_url }))
-      console.log(`[retry:${jobId}] Reusing ${shots.length} saved angle shots`)
-    }
-
-    // ── Step 3: videos (only if not already saved) ────────────────────────
-    if (!hasVideos) {
-      console.log(`[retry:${jobId}] Step 3: generating video clips`)
-      videoClips = await generateAllVideoClips(shots, description, modelImageUrl)
-      const shotsWithVideos = shots.map(shot => ({
-        ...shot,
-        video_url: videoClips.find(v => v.angle === shot.angle)?.video_url ?? null,
-      }))
-      await updateJob(jobId, { status: 'videos_done', angle_shots: shotsWithVideos })
-      console.log(`[retry:${jobId}] ${videoClips.length} videos done`)
-    } else {
-      videoClips = job.angle_shots
-        .filter((s: { video_url: string | null }) => s.video_url)
-        .map((s: { angle: string; video_url: string }) => ({ angle: s.angle, video_url: s.video_url }))
-      console.log(`[retry:${jobId}] Reusing ${videoClips.length} saved videos`)
-    }
-
-    // ── Step 4: stitch ────────────────────────────────────────────────────
-    console.log(`[retry:${jobId}] Step 4: stitching`)
-    await updateJob(jobId, { status: 'stitching' })
-
-    let finalVideoUrl: string | null = null
-    try {
-      const videoUrls = videoClips.map(v => v.video_url)
-      const finalPath = await stitchVideosWithTransitions(videoUrls, jobId)
-      finalVideoUrl = await uploadFinalVideo(finalPath, jobId, supabaseAdmin as any)
-      console.log(`[retry:${jobId}] ✅ Stitch complete: ${finalVideoUrl}`)
-    } catch (stitchErr) {
-      const msg = stitchErr instanceof Error ? stitchErr.message : String(stitchErr)
-      console.error(`[retry:${jobId}] ⚠️ Stitch failed (non-fatal): ${msg}`)
-      finalVideoUrl = videoClips[0]?.video_url ?? null
-    }
-
-    await updateJob(jobId, { status: 'completed', final_video_url: finalVideoUrl })
-    console.log(`[retry:${jobId}] ✅ Complete`)
-
+    console.log(`[retry:${jobId}] Re-running Step 2: angle shots`)
+    // Use the outfit baked into the saved portrait. Fall back to a new pick only for old
+    // job rows that predate the `outfit` column — avoids visible cloth/colour drift.
+    const outfit: string = job.outfit ?? pickOutfit()
+    const shots = await generateAngleShots(modelImageUrl, description, jewelleryImageUrl, outfit)
+    await updateJob(jobId, {
+      status: 'shots_done',
+      angle_shots: shots.map(s => ({ angle: s.angle, image_url: s.image_url, video_url: null })),
+    })
+    console.log(`[retry:${jobId}] ${shots.length} shots done — firing videos`)
+    await fireStep(jobId, 'videos')
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`[retry:${jobId}] ❌ Failed: ${msg}`)
+    console.error(`[retry:${jobId}] ❌ Angle shots failed: ${msg}`)
     await updateJob(jobId, { status: 'failed', error_message: msg })
   }
 }

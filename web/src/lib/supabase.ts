@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-// Server-side client (bypasses RLS) — only used in API routes
+// Server-side client (bypasses RLS) — only used in API routes.
+// Falls back to placeholder values at build time (env vars are always
+// present at runtime on Vercel).
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co'
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'placeholder-key'
 export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
 
 export type JobStatus =

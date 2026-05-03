@@ -22,3 +22,5 @@ raw/
 .claude/
 .claude/
 .graphify_*
+
+.vercel

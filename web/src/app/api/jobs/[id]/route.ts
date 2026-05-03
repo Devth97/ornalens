@@ -6,12 +6,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = await params
+  const { id } = await context.params
 
   const { data: job, error } = await supabaseAdmin
     .from('jobs')

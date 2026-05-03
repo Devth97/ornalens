@@ -1,6 +1,18 @@
 // MuAPI client — jewellery placement, multi-angle shots, video generation
 const BASE_URL = 'https://api.muapi.ai'
 
+// ─── Dev mode ─────────────────────────────────────────────────────────────
+// Set MUAPI_DEV_MODE=true in .env.local to skip all MuAPI calls and return
+// placeholder images/videos instantly. Tests the full pipeline (DB writes,
+// chain-fire routing, stitching, mobile UI) at zero credit cost.
+const DEV_MODE = process.env.MUAPI_DEV_MODE === 'true'
+
+// Consistent placeholder URLs — same seed = same image every run, so you can
+// verify DB writes and UI rendering without burning credits.
+const DEV_PORTRAIT   = 'https://picsum.photos/seed/ornalens-portrait/720/1280'
+const DEV_VIDEO      = 'https://www.w3schools.com/html/mov_bbb.mp4'
+const devShotUrl = (angle: string) => `https://picsum.photos/seed/ornalens-${angle}/720/1280`
+
 // ─── Character anchor ─────────────────────────────────────────────────────
 // Locked across ALL prompts — prevents model drift between angles and videos.
 // Skin tone intentionally omitted here; injected dynamically from modelStyle.
@@ -64,26 +76,48 @@ const SHOT_ANGLES = [
 ]
 
 // ─── Core request helpers ────────────────────────────────────────────────
+
+// Submit with retry — 429/500/503 are transient; back off and retry up to 4 times.
+// Without this, parallel angle-shot submissions all hit MuAPI at the same ms and
+// 3/5 get rate-limited immediately (cost $0, fail permanently).
 async function submitJob(endpoint: string, body: Record<string, unknown>): Promise<string> {
-  const res = await fetch(`${BASE_URL}/api/v1/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.MUAPI_KEY!,
-    },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`MuAPI [${endpoint}] submit failed: ${res.status} ${text}`)
+  const MAX_RETRIES = 4
+  let lastError = ''
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(`${BASE_URL}/api/v1/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.MUAPI_KEY!,
+      },
+      body: JSON.stringify(body),
+    })
+
+    // Transient errors — back off and retry
+    if (res.status === 429 || res.status === 500 || res.status === 503) {
+      const backoffMs = attempt * 6000  // 6s, 12s, 18s, 24s
+      lastError = `${res.status}`
+      console.warn(`[muapi] ${endpoint} submit ${res.status} (attempt ${attempt}/${MAX_RETRIES}), retrying in ${backoffMs / 1000}s`)
+      await new Promise(r => setTimeout(r, backoffMs))
+      continue
+    }
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`MuAPI [${endpoint}] submit failed: ${res.status} ${text}`)
+    }
+
+    const data = await res.json()
+    // Validate the job ID exists — if missing, polling /undefined/result wastes 5-10 min
+    const requestId: string | undefined = data.request_id ?? data.id ?? data.prediction_id
+    if (!requestId) {
+      throw new Error(`MuAPI [${endpoint}] submit succeeded but no request_id in response. Keys: ${Object.keys(data).join(', ')}`)
+    }
+    return requestId
   }
-  const data = await res.json()
-  // Validate the job ID exists — if missing, polling /undefined/result wastes 5-10 min
-  const requestId: string | undefined = data.request_id ?? data.id ?? data.prediction_id
-  if (!requestId) {
-    throw new Error(`MuAPI [${endpoint}] submit succeeded but no request_id in response. Keys: ${Object.keys(data).join(', ')}`)
-  }
-  return requestId
+
+  throw new Error(`MuAPI [${endpoint}] submit failed after ${MAX_RETRIES} retries (last status: ${lastError})`)
 }
 
 async function pollResult(requestId: string, maxWaitMs = 300_000): Promise<string> {
@@ -144,6 +178,67 @@ export async function uploadToMuAPI(imageBuffer: Buffer, filename: string): Prom
   return data.url
 }
 
+// ─── Template photoshoot: single-pass AI generation ─────────────────────
+/**
+ * Generate a styled jewellery product photo from a template prompt.
+ * Uses nano-banana-2-edit with the jewellery image as reference.
+ *
+ * The prompt is carefully constructed to:
+ *   1. Extract ONLY the jewellery piece from the reference (ignore fingers, hands, tags, skin)
+ *   2. Reproduce the exact jewellery design — every gemstone, metal, setting, detail
+ *   3. Place it naturally in the template scene
+ */
+export async function generatePhotoshootImage(
+  jewelleryImageUrl: string,
+  prompt: string,
+  aspectRatio: string = '1:1',
+  resolution?: string,
+): Promise<string> {
+  if (DEV_MODE) {
+    console.log('[muapi:dev] Photoshoot — returning placeholder image (no API call)')
+    await new Promise(r => setTimeout(r, 800))
+    return DEV_PORTRAIT
+  }
+
+  // Build an enhanced prompt with strict jewellery fidelity + extraction instructions
+  const enhancedPrompt = [
+    // Scene/template instruction (from the template prompt)
+    prompt,
+
+    // EXTRACTION: tell the AI what to take from the reference image
+    'REFERENCE IMAGE EXTRACTION: The reference image contains a jewellery piece that may be held by fingers, worn on a hand, or shown with tags/labels/skin/background.',
+    'Extract ONLY the jewellery piece itself from the reference image — completely ignore and remove all fingers, hands, skin, wrists, price tags, labels, stickers, and any non-jewellery elements.',
+    'The output image must show ONLY the jewellery piece — no human body parts whatsoever.',
+
+    // FIDELITY: exact reproduction of the jewellery design
+    'JEWELLERY FIDELITY: Reproduce the EXACT jewellery design from the reference image with 100% accuracy.',
+    'Copy every gemstone — exact shape, cut, size, colour, clarity, number, and arrangement — with zero modification.',
+    'Copy every metal element — exact colour (yellow gold, white gold, rose gold, platinum, silver), texture, finish (polished, matte, brushed), and pattern.',
+    'Copy the exact band width, prong style, setting type, and structural design.',
+    'DO NOT add, remove, resize, simplify, or alter ANY design element of the jewellery.',
+    'DO NOT add extra accessories, stones, or decorative elements not present in the reference.',
+
+    // SURFACE PROTECTION: scene elements must NEVER touch the jewellery
+    'CRITICAL SURFACE RULE: The jewellery surface must remain 100% clean, clear, and fully visible at all times.',
+    'Scene elements like ice, snow, frost, water, dust, petals, sand, smoke, or any particles must ONLY appear in the background and surrounding area.',
+    'NOTHING from the scene should overlap, cover, rest on, or obscure any part of the jewellery — not even partially.',
+    'The jewellery must look freshly polished and pristine with every gemstone, metal detail, and design feature clearly visible and unobstructed.',
+
+    // QUALITY
+    'Professional product photography, ultra-sharp focus on every jewellery detail, 4K, photorealistic',
+  ].join('. ')
+
+  const params: Record<string, unknown> = {
+    prompt: enhancedPrompt,
+    images_list: [jewelleryImageUrl],
+    aspect_ratio: aspectRatio,
+  }
+  if (resolution) params.resolution = resolution
+
+  const requestId = await submitJob('nano-banana-2-edit', params)
+  return pollResult(requestId, 600_000)
+}
+
 // ─── Step 1: Place jewellery on model (NanoBanana 2) ─────────────────────
 /**
  * CRITICAL: jewellery design comes from images_list reference image ONLY.
@@ -157,6 +252,12 @@ export async function placeJewelleryOnModel(
   modelStyle: { skin_tone?: string; body_type?: string; pose?: string },
   outfit: string,
 ): Promise<string> {
+  if (DEV_MODE) {
+    console.log('[muapi:dev] Step 1 — returning placeholder portrait (no API call)')
+    await new Promise(r => setTimeout(r, 800))
+    return DEV_PORTRAIT
+  }
+
   const skinTone = modelStyle.skin_tone ?? 'medium'
   const bodyType = modelStyle.body_type ?? 'slim'
   const pose = modelStyle.pose ?? 'standing'
@@ -202,6 +303,12 @@ export async function generateAngleShots(
   jewelleryImageUrl?: string,
   outfit?: string,
 ): Promise<Array<{ angle: string; image_url: string }>> {
+  if (DEV_MODE) {
+    console.log('[muapi:dev] Step 2 — returning placeholder angle shots (no API call)')
+    await new Promise(r => setTimeout(r, 600))
+    return SHOT_ANGLES.map(({ angle }) => ({ angle, image_url: devShotUrl(angle) }))
+  }
+
   const outfitDesc = outfit ?? OUTFIT_OPTIONS[0]
 
   // Build images_list: always include model image; add jewellery ref if available for dual-anchor
@@ -209,9 +316,12 @@ export async function generateAngleShots(
     ? [modelImageUrl, jewelleryImageUrl]
     : [modelImageUrl]
 
-  // Promise.allSettled — if one angle fails we keep the rest and don't waste credits
+  // Promise.allSettled — if one angle fails we keep the rest and don't waste credits.
+  // Stagger submissions by 500ms each — prevents all 5 hitting MuAPI at the same ms
+  // which caused 3/5 to be rate-limited ($0 failure) in back-to-back testing.
   const settled = await Promise.allSettled(
-    SHOT_ANGLES.map(async ({ angle, composition }) => {
+    SHOT_ANGLES.map(async ({ angle, composition }, index) => {
+      if (index > 0) await new Promise(r => setTimeout(r, index * 500))
       const prompt = [
         // Model identity — baked into reference image, keep prompt short
         'same model as reference image, identical face skin tone makeup and sleek straight dark hair',
@@ -255,12 +365,12 @@ export async function generateAngleShots(
   return successes
 }
 
-// ─── Step 3: Image-to-video (Seedance Pro I2V Fast) ──────────────────────
+// ─── Step 3: Image-to-video (Seedance v1.5 Pro I2V Fast) ─────────────────
 /**
- * Seedance v1.5 Pro I2V — confirmed cheaper and better motion than v1.0 Pro.
+ * Primary: seedance-v1.5-pro-i2v-fast — faster than non-fast v1.5, no audio (saves ~50% cost).
  * API uses `image_url` (string), NOT `images_list` (array).
- * Confirmed params: prompt, image_url, aspect_ratio, duration, quality.
- * Falls back to seedance-pro-i2v-fast if v1.5 endpoint 422s.
+ * Params: prompt, image_url, aspect_ratio, duration, quality, generate_audio.
+ * Fallback: seedance-pro-i2v-fast (v1.0) if v1.5-fast endpoint 422s/404s.
  */
 export async function generateVideoFromShot(
   imageUrl: string,
@@ -268,36 +378,46 @@ export async function generateVideoFromShot(
   _description: string,
   _modelImageUrl?: string,
 ): Promise<string> {
+  if (DEV_MODE) {
+    console.log(`[muapi:dev] Step 3 — returning placeholder video for angle: ${angle} (no API call)`)
+    await new Promise(r => setTimeout(r, 400))
+    return DEV_VIDEO
+  }
+
   const motionPrompt = buildVideoMotionPrompt(angle)
 
-  // Try v1.5 first (cheaper + better motion). Fall back to confirmed v1.0 endpoint if 422.
+  // Primary: v1.5 fast variant — same quality tier as v1.5-pro-i2v but significantly faster.
+  // generate_audio: false — disables audio track generation (we never use it, halves credit cost).
+  // Fallback: seedance-pro-i2v-fast (confirmed working v1.0) if v1.5-fast endpoint 422s/404s.
   let requestId: string
   try {
-    requestId = await submitJob('seedance-v1.5-pro-i2v', {
+    requestId = await submitJob('seedance-v1.5-pro-i2v-fast', {
       prompt: motionPrompt,
       image_url: imageUrl,
       aspect_ratio: '9:16',
       duration: 5,
       quality: 'basic',
+      generate_audio: false,
     })
-    console.log(`[muapi] Using seedance-v1.5-pro-i2v for angle: ${angle}`)
+    console.log(`[muapi] Using seedance-v1.5-pro-i2v-fast for angle: ${angle}`)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.includes('422') || msg.includes('404') || msg.includes('not found')) {
-      console.warn(`[muapi] seedance-v1.5-pro-i2v failed (${msg}), falling back to seedance-pro-i2v-fast`)
+      console.warn(`[muapi] seedance-v1.5-pro-i2v-fast failed (${msg}), falling back to seedance-pro-i2v-fast`)
       requestId = await submitJob('seedance-pro-i2v-fast', {
         prompt: motionPrompt,
         image_url: imageUrl,
         aspect_ratio: '9:16',
         duration: 5,
-        // quality omitted — seedance-pro-i2v-fast may not support this param
+        generate_audio: false,
       })
     } else {
       throw e
     }
   }
 
-  return pollResult(requestId, 600_000)
+  // Fast variant should complete in 1-3 min. Fail at 180s rather than blocking the 300s budget.
+  return pollResult(requestId, 180_000)
 }
 
 // Motion-only prompts — the reference IMAGE handles all visuals.
@@ -341,7 +461,8 @@ export async function generateAllVideoClips(
   console.log(`[muapi] Submitting all ${shots.length} Seedance jobs in parallel`)
 
   const settled = await Promise.allSettled(
-    shots.map(async (shot) => {
+    shots.map(async (shot, index) => {
+      if (index > 0) await new Promise(r => setTimeout(r, index * 500))
       console.log(`[muapi] Submitted Seedance job for angle: ${shot.angle}`)
       const videoUrl = await generateVideoFromShot(shot.image_url, shot.angle, description, modelImageUrl)
       console.log(`[muapi] Video done for angle: ${shot.angle}`)
