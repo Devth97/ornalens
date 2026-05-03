@@ -1,6 +1,10 @@
 ﻿"use client";
 
 import { useEffect, useRef } from "react";
+import {
+  Upload, Sparkles, Camera, Clapperboard, Download, Share2,
+  Shield, Zap, MapPin, Image as ImageIcon, Play, ArrowRight, CheckCircle2,
+} from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -301,8 +305,9 @@ export default function Home() {
         <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
           {[
             { label: "About", href: "/about" },
-            { label: "Contact", href: "/contact" },
+            { label: "Results", href: "#results" },
             { label: "Pricing", href: "#pricing" },
+            { label: "Contact", href: "/contact" },
           ].map((link) => (
             <a
               key={link.label}
@@ -654,55 +659,86 @@ export default function Home() {
               position: "relative",
             }}
           >
-            {[
-              { icon: "📤", title: "Upload", desc: "Take a photo of your jewellery piece" },
-              { icon: "🤖", title: "Image AI", desc: "AI places it on a professional Indian model" },
-              { icon: "📸", title: "5 Angle Shots", desc: "Front, side, close-up, editorial — auto-generated" },
-              { icon: "🎬", title: "Video AI", desc: "5 cinematic clips stitched into final video" },
-            ].map((step, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 0 }}>
+            {([
+              {
+                Icon: Upload,
+                title: "Upload",
+                label: "Step 1",
+                desc: "Take a clear photo of your jewellery on any surface — phone camera is fine",
+                placeholder: "Upload UI mockup",
+              },
+              {
+                Icon: Sparkles,
+                title: "Image AI",
+                label: "Step 2",
+                desc: "AI places it on a professional Indian model — skin tone, attire, background auto-selected",
+                placeholder: "AI model result image",
+              },
+              {
+                Icon: Camera,
+                title: "5 Angle Shots",
+                label: "Step 3",
+                desc: "Front, side, close-up, 3/4 view and editorial — all auto-generated",
+                placeholder: "Angle shots grid",
+              },
+              {
+                Icon: Clapperboard,
+                title: "Video AI",
+                label: "Step 4",
+                desc: "5 cinematic clips per angle stitched into one final edited reel",
+                placeholder: "Final video reel preview",
+              },
+            ] as const).map((step, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 0 }}>
                 <div
                   className="how-step"
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    padding: "2rem 1rem",
-                    opacity: 0,
-                  }}
+                  style={{ flex: 1, textAlign: "center", padding: "1.5rem 0.75rem", opacity: 0 }}
                 >
-                  <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>{step.icon}</div>
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      width: "28px",
-                      height: "28px",
-                      borderRadius: "50%",
-                      border: `2px solid ${GOLD_TEXT}`,
-                      color: GOLD_TEXT,
-                      fontSize: "0.8rem",
-                      fontWeight: 700,
-                      marginBottom: "0.75rem",
-                    }}
-                  >
+                  {/* ── Image placeholder slot ── */}
+                  <div style={{
+                    width: "100%",
+                    aspectRatio: "4/3",
+                    background: CARD,
+                    border: `2px dashed ${BORDER}`,
+                    borderRadius: "12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: "1.25rem",
+                    gap: "0.5rem",
+                  }}>
+                    <step.Icon size={28} color={GOLD_TEXT} strokeWidth={1.5} />
+                    <span style={{ fontSize: "0.72rem", color: MUTED, letterSpacing: "0.02em" }}>
+                      [ {step.placeholder} ]
+                    </span>
+                  </div>
+                  <div style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    border: `2px solid ${GOLD_TEXT}`,
+                    color: GOLD_TEXT,
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    marginBottom: "0.75rem",
+                  }}>
                     {i + 1}
                   </div>
                   <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: "0.5rem" }}>{step.title}</div>
-                  <div style={{ color: MUTED, fontSize: "0.9rem", lineHeight: 1.5 }}>{step.desc}</div>
+                  <div style={{ color: MUTED, fontSize: "0.9rem", lineHeight: 1.6 }}>{step.desc}</div>
                 </div>
                 {i < 3 && (
-                  <div
-                    style={{
-                      alignSelf: "flex-start",
-                      paddingTop: "3.5rem",
-                      color: GOLD,
-                      fontSize: "1.5rem",
-                      opacity: 0.6,
-                      flexShrink: 0,
-                    }}
-                  >
-                    →
+                  <div style={{
+                    alignSelf: "center",
+                    paddingBottom: "5rem",
+                    flexShrink: 0,
+                    opacity: 0.5,
+                  }}>
+                    <ArrowRight size={20} color={GOLD_TEXT} />
                   </div>
                 )}
               </div>
@@ -736,39 +772,177 @@ export default function Home() {
               gap: "1.25rem",
             }}
           >
-            {[
-              { icon: "🖼", title: "Model Portrait", desc: "Indian model wearing your exact jewellery" },
-              { icon: "📸", title: "5 Angle Shots", desc: "Front, 3/4, close-up, side, overhead" },
-              { icon: "🎬", title: "5 Video Clips", desc: "Cinematic 5-second clips per angle" },
-              { icon: "🎞", title: "Final Video", desc: "All clips stitched into one edited reel" },
-              { icon: "⬇", title: "Downloads", desc: "HD images and MP4 video files" },
-              { icon: "📤", title: "Share Ready", desc: "Send directly to clients or post on Instagram" },
-            ].map((item, i) => (
+            {([
+              { Icon: ImageIcon,   title: "Model Portrait",  desc: "Indian model wearing your exact jewellery" },
+              { Icon: Camera,      title: "5 Angle Shots",   desc: "Front, 3/4, close-up, side, overhead" },
+              { Icon: Clapperboard,title: "5 Video Clips",   desc: "Cinematic 5-second clips per angle" },
+              { Icon: Play,        title: "Final Video",     desc: "All clips stitched into one edited reel" },
+              { Icon: Download,    title: "HD Downloads",    desc: "High-res images and MP4 video files" },
+              { Icon: Share2,      title: "Share Ready",     desc: "Send to clients or post on Instagram instantly" },
+            ] as const).map((item, i) => (
               <div
                 key={i}
                 className="what-card"
                 style={{
                   background: CARD,
                   border: `1px solid ${BORDER}`,
-                  borderRadius: "10px",
+                  borderRadius: "12px",
                   padding: "1.75rem",
                   opacity: 0,
-                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  transition: "border-color 0.2s, box-shadow 0.2s, transform 0.2s",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = GOLD_TEXT;
-                  (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(154,111,10,0.1)";
+                  const el = e.currentTarget as HTMLDivElement;
+                  el.style.borderColor = GOLD_TEXT;
+                  el.style.boxShadow = "0 8px 24px rgba(154,111,10,0.1)";
+                  el.style.transform = "translateY(-2px)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = BORDER;
-                  (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+                  const el = e.currentTarget as HTMLDivElement;
+                  el.style.borderColor = BORDER;
+                  el.style.boxShadow = "none";
+                  el.style.transform = "translateY(0)";
                 }}
               >
-                <div style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>{item.icon}</div>
+                <div style={{ marginBottom: "1rem", color: GOLD_TEXT }}>
+                  <item.Icon size={28} strokeWidth={1.5} />
+                </div>
                 <div style={{ fontWeight: 700, marginBottom: "0.4rem", fontSize: "1rem" }}>{item.title}</div>
-                <div style={{ color: MUTED, fontSize: "0.875rem", lineHeight: 1.5 }}>{item.desc}</div>
+                <div style={{ color: MUTED, fontSize: "0.875rem", lineHeight: 1.6 }}>{item.desc}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CASE STUDIES ── */}
+      <section id="results" style={{ padding: "6rem 1.5rem", background: CARD_ALT }}>
+        <div style={{ maxWidth: "1060px", margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: "3.5rem" }}>
+            <h2 style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 800, marginBottom: "0.75rem", letterSpacing: "-0.02em" }}>
+              Real Results from <span style={{ color: GOLD_TEXT }}>Real Jewellers</span>
+            </h2>
+            <p style={{ color: MUTED, fontSize: "1rem", maxWidth: "520px", margin: "0 auto", lineHeight: 1.7 }}>
+              Indian jewellers transforming their product photography with Ornalens
+            </p>
+          </div>
+
+          {/* ── Case study cards ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(440px, 1fr))", gap: "2rem", marginBottom: "3.5rem" }}>
+            {[
+              {
+                brand: "Jewellery Brand 1",
+                sub: "Fine Jewellery · Mumbai",
+                challenge: "₹80,000 per photoshoot, 4-day turnaround, inconsistent quality",
+                result: "Cut shoot cost by 85% — professional model images in 15 minutes",
+                metrics: ["85% cost reduction", "5× more SKUs photographed", "Higher Instagram engagement"],
+                imagePlaceholder: "Before / After image — Brand 1",
+              },
+              {
+                brand: "Jewellery Brand 2",
+                sub: "Bridal Jewellery · Bangalore",
+                challenge: "Difficulty showcasing bridal sets consistently across catalogue",
+                result: "Consistent, studio-quality visuals across 200+ bridal pieces",
+                metrics: ["Consistent brand look", "E-commerce ready images", "3× faster product listing"],
+                imagePlaceholder: "Before / After image — Brand 2",
+              },
+            ].map((cs, i) => (
+              <div key={i} style={{
+                background: CARD,
+                border: `1px solid ${BORDER}`,
+                borderRadius: "16px",
+                overflow: "hidden",
+                boxShadow: "0 4px 24px rgba(28,18,9,0.06)",
+              }}>
+                {/* Image placeholder */}
+                <div style={{
+                  width: "100%",
+                  aspectRatio: "16/9",
+                  background: CARD_ALT,
+                  border: `none`,
+                  borderBottom: `2px dashed ${BORDER}`,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.6rem",
+                }}>
+                  <ImageIcon size={32} color={MUTED} strokeWidth={1.5} />
+                  <span style={{ fontSize: "0.8rem", color: MUTED }}>[ {cs.imagePlaceholder} ]</span>
+                </div>
+                <div style={{ padding: "1.75rem" }}>
+                  <div style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                    background: "rgba(154,111,10,0.08)",
+                    border: `1px solid rgba(154,111,10,0.2)`,
+                    borderRadius: "20px",
+                    padding: "0.25rem 0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: GOLD_TEXT,
+                    marginBottom: "1rem",
+                  }}>
+                    <CheckCircle2 size={12} />
+                    Verified Customer
+                  </div>
+                  <h3 style={{ fontWeight: 800, fontSize: "1.2rem", marginBottom: "0.2rem" }}>{cs.brand}</h3>
+                  <p style={{ color: MUTED, fontSize: "0.85rem", marginBottom: "1.25rem" }}>{cs.sub}</p>
+                  <div style={{ marginBottom: "0.9rem" }}>
+                    <div style={{ fontSize: "0.75rem", fontWeight: 700, color: MUTED, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Challenge</div>
+                    <p style={{ color: TEXT, fontSize: "0.9rem", lineHeight: 1.6 }}>{cs.challenge}</p>
+                  </div>
+                  <div style={{ marginBottom: "1.25rem" }}>
+                    <div style={{ fontSize: "0.75rem", fontWeight: 700, color: MUTED, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Result</div>
+                    <p style={{ color: GOLD_TEXT, fontSize: "0.95rem", lineHeight: 1.6, fontWeight: 700 }}>{cs.result}</p>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    {cs.metrics.map((m, j) => (
+                      <div key={j} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: MUTED }}>
+                        <CheckCircle2 size={14} color={GOLD_TEXT} style={{ flexShrink: 0 }} />
+                        {m}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Video showcase placeholder ── */}
+          <div style={{
+            width: "100%",
+            maxWidth: "860px",
+            margin: "0 auto",
+            aspectRatio: "16/9",
+            background: CARD,
+            border: `2px dashed ${BORDER}`,
+            borderRadius: "16px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.75rem",
+          }}>
+            <div style={{
+              width: "56px",
+              height: "56px",
+              borderRadius: "50%",
+              background: CARD_ALT,
+              border: `1px solid ${BORDER}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <Play size={24} color={GOLD_TEXT} />
+            </div>
+            <div style={{ fontWeight: 700, fontSize: "1rem", color: TEXT }}>
+              [ Add a showcase video or reel here ]
+            </div>
+            <div style={{ fontSize: "0.85rem", color: MUTED, maxWidth: "360px", textAlign: "center", lineHeight: 1.6 }}>
+              Embed a sample output video to show potential customers what they&apos;ll receive
+            </div>
           </div>
         </div>
       </section>
@@ -965,23 +1139,23 @@ export default function Home() {
               gap: "1.5rem",
             }}
           >
-            {[
+            {([
               {
-                icon: "🇮🇳",
+                Icon: MapPin,
                 title: "Built for India",
                 desc: "Understands Indian skin tones, ethnic attire, and traditional jewellery types",
               },
               {
-                icon: "🔒",
+                Icon: Shield,
                 title: "Your Design, Protected",
-                desc: "Jewellery design copied with pixel-perfect accuracy. Never altered.",
+                desc: "Jewellery design copied with pixel-perfect accuracy. Never altered or shared.",
               },
               {
-                icon: "⚡",
+                Icon: Zap,
                 title: "15 Minutes, Not 3 Days",
                 desc: "Full photo shoot + video shoot delivered while you wait. No back and forth.",
               },
-            ].map((item, i) => (
+            ] as const).map((item, i) => (
               <div
                 key={i}
                 className="trust-col"
@@ -992,11 +1166,34 @@ export default function Home() {
                   borderRadius: "12px",
                   border: `1px solid ${BORDER}`,
                   opacity: 0,
+                  transition: "box-shadow 0.2s, transform 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  const el = e.currentTarget as HTMLDivElement;
+                  el.style.boxShadow = "0 8px 24px rgba(154,111,10,0.08)";
+                  el.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  const el = e.currentTarget as HTMLDivElement;
+                  el.style.boxShadow = "none";
+                  el.style.transform = "translateY(0)";
                 }}
               >
-                <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>{item.icon}</div>
+                <div style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "14px",
+                  background: "rgba(154,111,10,0.08)",
+                  marginBottom: "1.25rem",
+                  color: GOLD_TEXT,
+                }}>
+                  <item.Icon size={26} strokeWidth={1.5} />
+                </div>
                 <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: "0.6rem" }}>{item.title}</div>
-                <div style={{ color: MUTED, fontSize: "0.9rem", lineHeight: 1.6 }}>{item.desc}</div>
+                <div style={{ color: MUTED, fontSize: "0.9rem", lineHeight: 1.7 }}>{item.desc}</div>
               </div>
             ))}
           </div>
