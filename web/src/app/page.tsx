@@ -6,10 +6,14 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 gsap.registerPlugin(ScrollTrigger);
 
-const GOLD = "#D4AF37";
-const BG = "#0a0a0a";
-const CARD = "#141414";
-const MUTED = "#888888";
+const GOLD     = "#D4AF37";
+const GOLD_TEXT = "#9A6F0A";
+const BG        = "#FAF7F2";
+const CARD      = "#FFFFFF";
+const CARD_ALT  = "#F5F0E8";
+const MUTED     = "#7A6550";
+const BORDER    = "#E8DDD0";
+const TEXT      = "#1C1209";
 
 export default function Home() {
   const navRef = useRef<HTMLElement>(null);
@@ -36,9 +40,9 @@ export default function Home() {
         start: "top -80",
         onUpdate: (self) => {
           if (self.progress > 0) {
-            nav.style.background = "rgba(10,10,10,0.85)";
+            nav.style.background = "rgba(250,247,242,0.95)";
             nav.style.backdropFilter = "blur(12px)";
-            nav.style.borderBottom = `1px solid rgba(212,175,55,0.15)`;
+            nav.style.borderBottom = `1px solid ${BORDER}`;
           } else {
             nav.style.background = "transparent";
             nav.style.backdropFilter = "none";
@@ -268,9 +272,10 @@ export default function Home() {
   }
 
   const WA_LINK = "https://wa.me/919901542387?text=Hi%2C%20I%27m%20interested%20in%20Ornalens%20AI%20jewellery%20photography.%20Can%20you%20help%20me%20get%20started%3F";
+  const APP_LINK = "/dashboard";
 
   return (
-    <div style={{ background: BG, color: "#fff", overflowX: "hidden" }}>
+    <div style={{ background: BG, color: TEXT, overflowX: "hidden" }}>
       {/* ── NAV ── */}
       <nav
         ref={navRef}
@@ -290,34 +295,41 @@ export default function Home() {
           transition: "background 0.3s, backdrop-filter 0.3s, border-color 0.3s",
         }}
       >
-        <span style={{ color: GOLD, fontWeight: 700, fontSize: "1.25rem", letterSpacing: "0.02em" }}>
+        <span style={{ color: GOLD_TEXT, fontWeight: 800, fontSize: "1.25rem", letterSpacing: "0.02em" }}>
           ◆ Ornalens
         </span>
-        <a
-          href={WA_LINK}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            border: `1px solid ${GOLD}`,
-            color: GOLD,
-            padding: "0.45rem 1.25rem",
-            borderRadius: "6px",
-            fontSize: "0.9rem",
-            fontWeight: 600,
-            textDecoration: "none",
-            transition: "background 0.2s, color 0.2s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background = GOLD;
-            (e.currentTarget as HTMLAnchorElement).style.color = "#000";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
-            (e.currentTarget as HTMLAnchorElement).style.color = GOLD;
-          }}
-        >
-          Get Started →
-        </a>
+        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
+          {[
+            { label: "About", href: "/about" },
+            { label: "Contact", href: "/contact" },
+            { label: "Pricing", href: "#pricing" },
+          ].map((link) => (
+            <a
+              key={link.label}
+              href={link.href}
+              style={{ color: MUTED, fontSize: "0.9rem", fontWeight: 500, textDecoration: "none", transition: "color 0.2s" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = GOLD_TEXT; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = MUTED; }}
+            >{link.label}</a>
+          ))}
+          <a
+            href={APP_LINK}
+            style={{
+              background: GOLD_TEXT,
+              color: "#fff",
+              padding: "0.45rem 1.25rem",
+              borderRadius: "6px",
+              fontSize: "0.9rem",
+              fontWeight: 700,
+              textDecoration: "none",
+              transition: "opacity 0.2s",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = "0.85"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = "1"; }}
+          >
+            Get Started →
+          </a>
+        </div>
       </nav>
 
       {/* ── HERO ── */}
@@ -343,7 +355,7 @@ export default function Home() {
             transform: "translate(-50%, -50%)",
             width: "700px",
             height: "700px",
-            background: `radial-gradient(ellipse at center, rgba(212,175,55,0.12) 0%, transparent 70%)`,
+            background: `radial-gradient(ellipse at center, rgba(154,111,10,0.08) 0%, transparent 70%)`,
             pointerEvents: "none",
           }}
         />
@@ -354,7 +366,7 @@ export default function Home() {
               style={{
                 fontSize: "clamp(3rem, 8vw, 6.5rem)",
                 fontWeight: 800,
-                color: "#fff",
+                color: TEXT,
                 letterSpacing: "-0.02em",
               }}
             >
@@ -386,7 +398,7 @@ export default function Home() {
             opacity: 0,
           }}
         >
-          A <span style={{ color: "#fff", fontWeight: 600 }}>₹1,00,000 photo & video shoot</span> for{" "}
+          A <span style={{ color: TEXT, fontWeight: 600 }}>₹1,00,000 photo & video shoot</span> for{" "}
           <span style={{ color: GOLD, fontWeight: 700 }}>₹1,299</span>. In 15 minutes.
           <br />
           <span style={{ fontSize: "0.9em" }}>
@@ -410,9 +422,7 @@ export default function Home() {
           }}
         >
           <a
-            href={WA_LINK}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={APP_LINK}
             style={{
               background: GOLD,
               color: "#000",
@@ -490,10 +500,10 @@ export default function Home() {
       <div
         ref={statsRef}
         style={{
-          background: CARD,
-          borderTop: `1px solid rgba(212,175,55,0.15)`,
-          borderBottom: `1px solid rgba(212,175,55,0.15)`,
+          borderTop: `1px solid ${BORDER}`,
+          borderBottom: `1px solid ${BORDER}`,
           padding: "3rem 2rem",
+          background: CARD_ALT,
         }}
       >
         <div
@@ -517,7 +527,7 @@ export default function Home() {
                 flex: "1 1 200px",
                 textAlign: "center",
                 padding: "1rem 2rem",
-                borderRight: i < 2 ? `1px solid rgba(212,175,55,0.25)` : "none",
+                borderRight: i < 2 ? `1px solid ${BORDER}` : "none",
                 position: "relative",
               }}
             >
@@ -564,8 +574,8 @@ export default function Home() {
             <div
               ref={problemLeftRef}
               style={{
-                background: "rgba(180,30,30,0.08)",
-                border: "1px solid rgba(180,30,30,0.25)",
+                background: "rgba(180,30,30,0.06)",
+                border: "1px solid rgba(180,30,30,0.2)",
                 borderRadius: "12px",
                 padding: "2rem",
                 opacity: 0,
@@ -591,15 +601,15 @@ export default function Home() {
             <div
               ref={problemRightRef}
               style={{
-                background: "rgba(212,175,55,0.06)",
-                border: `1px solid rgba(212,175,55,0.3)`,
+                background: "rgba(154,111,10,0.05)",
+                border: `1px solid rgba(154,111,10,0.25)`,
                 borderRadius: "12px",
                 padding: "2rem",
                 opacity: 0,
               }}
             >
-              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: GOLD, marginBottom: "1.25rem" }}>
-                ✦ The Ornalens Way
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: GOLD_TEXT, marginBottom: "1.25rem" }}>
+                ✔ The Ornalens Way
               </div>
               {[
                 "₹1,299 — photos + videos included",
@@ -607,7 +617,7 @@ export default function Home() {
                 "Just your phone to upload",
                 "5 angle photos + 5 videos + final reel",
               ].map((item, i) => (
-                <div key={i} style={{ display: "flex", gap: "0.75rem", marginBottom: "0.9rem", color: "#ddd", lineHeight: 1.5 }}>
+                <div key={i} style={{ display: "flex", gap: "0.75rem", marginBottom: "0.9rem", color: TEXT, lineHeight: 1.5 }}>
                   <span style={{ color: GOLD, flexShrink: 0 }}>✓</span>
                   {item}
                 </div>
@@ -618,7 +628,7 @@ export default function Home() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section id="how" style={{ padding: "6rem 1.5rem", background: CARD }}>
+      <section id="how" style={{ padding: "6rem 1.5rem", background: CARD_ALT }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
           <h2
             style={{
@@ -669,8 +679,8 @@ export default function Home() {
                       width: "28px",
                       height: "28px",
                       borderRadius: "50%",
-                      border: `2px solid ${GOLD}`,
-                      color: GOLD,
+                      border: `2px solid ${GOLD_TEXT}`,
+                      color: GOLD_TEXT,
                       fontSize: "0.8rem",
                       fontWeight: 700,
                       marginBottom: "0.75rem",
@@ -739,17 +749,19 @@ export default function Home() {
                 className="what-card"
                 style={{
                   background: CARD,
-                  border: `1px solid rgba(212,175,55,0.12)`,
+                  border: `1px solid ${BORDER}`,
                   borderRadius: "10px",
                   padding: "1.75rem",
                   opacity: 0,
-                  transition: "border-color 0.2s",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = `rgba(212,175,55,0.4)`;
+                  (e.currentTarget as HTMLDivElement).style.borderColor = GOLD_TEXT;
+                  (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 16px rgba(154,111,10,0.1)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = `rgba(212,175,55,0.12)`;
+                  (e.currentTarget as HTMLDivElement).style.borderColor = BORDER;
+                  (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
                 }}
               >
                 <div style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>{item.icon}</div>
@@ -820,8 +832,9 @@ export default function Home() {
                 key={i}
                 className="pricing-card"
                 style={{
-                  background: BG,
-                  border: plan.highlight ? `2px solid ${GOLD}` : `1px solid rgba(255,255,255,0.1)`,
+                  background: CARD,
+                  border: plan.highlight ? `2px solid ${GOLD}` : `1px solid ${BORDER}`,
+                  boxShadow: plan.highlight ? "0 8px 32px rgba(212,175,55,0.15)" : "0 2px 8px rgba(28,18,9,0.06)",
                   borderRadius: "12px",
                   padding: "2rem",
                   position: "relative",
@@ -854,8 +867,8 @@ export default function Home() {
                       top: "-14px",
                       left: "50%",
                       transform: "translateX(-50%)",
-                      background: "rgba(255,255,255,0.1)",
-                      color: "#fff",
+                      background: CARD_ALT,
+                      color: MUTED,
                       fontWeight: 700,
                       fontSize: "0.75rem",
                       padding: "0.25rem 1rem",
@@ -866,16 +879,16 @@ export default function Home() {
                     {plan.badge}
                   </div>
                 )}
-                <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "1rem", color: plan.highlight ? GOLD : "#fff" }}>
+                <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "1rem", color: plan.highlight ? GOLD_TEXT : TEXT }}>
                   {plan.credits}
                 </div>
                 <div style={{ fontSize: "clamp(2rem, 5vw, 2.5rem)", fontWeight: 800, lineHeight: 1, marginBottom: "0.4rem" }}>
                   {plan.price}
                 </div>
                 <div style={{ color: MUTED, fontSize: "0.85rem", marginBottom: "1.5rem" }}>{plan.sub}</div>
-                <div style={{ borderTop: `1px solid rgba(255,255,255,0.08)`, paddingTop: "1.25rem", marginBottom: "1.5rem" }}>
+                <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: "1.25rem", marginBottom: "1.5rem" }}>
                   {plan.features.map((f, j) => (
-                    <div key={j} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.6rem", fontSize: "0.875rem", color: "#ccc" }}>
+                    <div key={j} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.6rem", fontSize: "0.875rem", color: MUTED }}>
                       <span style={{ color: GOLD }}>✓</span> {f}
                     </div>
                   ))}
@@ -888,8 +901,8 @@ export default function Home() {
                     display: "block",
                     textAlign: "center",
                     background: plan.highlight ? GOLD : "transparent",
-                    border: plan.highlight ? "none" : `1px solid rgba(255,255,255,0.2)`,
-                    color: plan.highlight ? "#000" : "#fff",
+                    border: plan.highlight ? "none" : `1px solid ${BORDER}`,
+                    color: plan.highlight ? TEXT : GOLD_TEXT,
                     fontWeight: 700,
                     padding: "0.75rem",
                     borderRadius: "8px",
@@ -977,7 +990,7 @@ export default function Home() {
                   padding: "2rem 1.5rem",
                   background: CARD,
                   borderRadius: "12px",
-                  border: `1px solid rgba(212,175,55,0.1)`,
+                  border: `1px solid ${BORDER}`,
                   opacity: 0,
                 }}
               >
@@ -1005,7 +1018,7 @@ export default function Home() {
           style={{
             position: "absolute",
             inset: 0,
-            background: `radial-gradient(ellipse at center, rgba(212,175,55,0.1) 0%, transparent 65%)`,
+            background: `radial-gradient(ellipse at center, rgba(154,111,10,0.07) 0%, transparent 65%)`,
             pointerEvents: "none",
           }}
         />
@@ -1062,21 +1075,32 @@ export default function Home() {
       <footer
         ref={footerRef}
         style={{
-          borderTop: `1px solid rgba(212,175,55,0.2)`,
-          padding: "2rem 2rem",
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          background: CARD,
+          borderTop: `1px solid ${BORDER}`,
+          padding: "2.5rem 2rem",
+          background: CARD_ALT,
         }}
       >
-        <span style={{ color: GOLD, fontWeight: 700, fontSize: "1rem" }}>◆ Ornalens</span>
-        <span style={{ color: MUTED, fontSize: "0.85rem", textAlign: "center" }}>
-          © 2026 Ornalens. All rights reserved.
-        </span>
-        <span style={{ color: MUTED, fontSize: "0.85rem" }}>ornalens.com</span>
+        <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "1.5rem" }}>
+          <span style={{ color: GOLD_TEXT, fontWeight: 800, fontSize: "1.1rem" }}>◆ Ornalens</span>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", alignItems: "center" }}>
+            {[
+              { label: "About Us", href: "/about" },
+              { label: "Contact", href: "/contact" },
+              { label: "Privacy Policy", href: "/privacy" },
+              { label: "Terms & Conditions", href: "/terms" },
+              { label: "Refund Policy", href: "/refund" },
+            ].map((l) => (
+              <a key={l.label} href={l.href}
+                style={{ color: MUTED, fontSize: "0.85rem", textDecoration: "none", transition: "color 0.2s" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = GOLD_TEXT; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = MUTED; }}
+              >{l.label}</a>
+            ))}
+          </div>
+
+          <span style={{ color: MUTED, fontSize: "0.8rem" }}>© 2026 Ornalens. All rights reserved.</span>
+        </div>
       </footer>
     </div>
   );

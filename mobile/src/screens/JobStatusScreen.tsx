@@ -23,6 +23,14 @@ function getStepIndex(status: string): number {
   return STATUS_ORDER.indexOf(status)
 }
 
+function getResumeStep(job: Job): string {
+  const hasAngleShots = job.angle_shots?.some((s: AngleShot) => s.image_url)
+  const hasVideos = job.angle_shots?.some((s: AngleShot) => s.video_url)
+  if (hasVideos)     return 'Stitching final video (Step 4)'
+  if (hasAngleShots) return 'Generating video clips (Step 3)'
+  return 'Generating angle shots (Step 2)'
+}
+
 // ─── Download helper ────────────────────────────────────────────────────────
 async function downloadToGallery(url: string, filename: string, isVideo = false): Promise<void> {
   // Request permission
@@ -195,14 +203,21 @@ export default function JobStatusScreen() {
           {(job.model_image_url || job.angle_shots?.length > 0) && (
             <Text style={styles.errorHint}>↓ Scroll down — your images and videos are still available below</Text>
           )}
-          {job.model_image_url && (
-            <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} disabled={retrying}>
-              {retrying
-                ? <ActivityIndicator size="small" color="#0a0a0a" />
-                : <Text style={styles.retryBtnText}>↺  Resume Pipeline</Text>
-              }
-            </TouchableOpacity>
-          )}
+        </View>
+      )}
+
+      {/* Standalone resume card — only on failed jobs (prevents duplicate runs mid-pipeline) */}
+      {isFailed && job.model_image_url && (
+        <View style={styles.resumeCard}>
+          <Text style={styles.resumeLabel}>
+            ↺  Resume from: <Text style={styles.resumeStep}>{getResumeStep(job)}</Text>
+          </Text>
+          <TouchableOpacity style={styles.resumeBtn} onPress={handleRetry} disabled={retrying}>
+            {retrying
+              ? <ActivityIndicator size="small" color="#0a0a0a" />
+              : <Text style={styles.resumeBtnText}>Resume Pipeline</Text>
+            }
+          </TouchableOpacity>
         </View>
       )}
 
@@ -398,8 +413,15 @@ const styles = StyleSheet.create({
 
   processingHint: { color: '#444', fontSize: 12, textAlign: 'center', lineHeight: 20, paddingHorizontal: 20, marginTop: 8 },
   errorHint: { color: '#D4AF37', fontSize: 12, marginTop: 8, fontWeight: '600' },
-  retryBtn: { backgroundColor: '#D4AF37', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
-  retryBtnText: { color: '#0a0a0a', fontWeight: '800', fontSize: 14 },
+
+  resumeCard: {
+    backgroundColor: '#141414', borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: '#D4AF3744', marginBottom: 24,
+  },
+  resumeLabel: { color: '#888', fontSize: 13, marginBottom: 12 },
+  resumeStep:  { color: '#D4AF37', fontWeight: '700' },
+  resumeBtn: { backgroundColor: '#D4AF37', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
+  resumeBtnText: { color: '#0a0a0a', fontWeight: '800', fontSize: 15 },
 
   // Individual clip rows
   clipRow: { backgroundColor: '#141414', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#222' },
